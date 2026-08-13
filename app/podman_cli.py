@@ -223,9 +223,9 @@ async def start_container(model_name: str, max_model_len: int = 2048, extra_args
             "-v", f"{model_path.resolve()}:/workspace/model:ro",
             IMAGE_NAME,
             "vllm", "serve", "/workspace/model",
-            "--dtype", "float16",
+            "--dtype", str(config.gpu.dtype),
             "--port", "8000",
-            "--gpu-memory-utilization", "0.70",
+            "--gpu-memory-utilization", str(config.gpu.memory_utilization),
             "--max-model-len", str(max_model_len)
         ]
 
