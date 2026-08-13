@@ -24,6 +24,52 @@ Questo progetto è **pensato per rete locale + Tailscale**, non è un servizio i
 
 ---
 
+## 📊 IMPLEMENTATION STATUS
+
+### Files Creati/Modificati
+
+**FASE 1 - Completata:**
+- ✅ `app/validators.py` - Input validation con whitelist
+- ✅ `app/security.py` - CORS smart + API Key middleware
+- ✅ `app/logging_config.py` - Structured logging
+- ✅ `app/event_broadcaster.py` - Thread-safe event broadcaster per logs
+- ✅ `.env.example` - Environment configuration template
+- ✅ `requirements.txt` - Updated dependencies (pydantic, python-dotenv, pyyaml)
+- ✅ `app/main.py` - Updated with security middleware + input validation
+- ✅ `app/podman_cli.py` - Updated with EventBroadcaster (sostituisce asyncio.Queue)
+- ✅ `README.md` - Added security & configuration section
+
+**FASE 2 - Completata:**
+- ✅ `app/config.py` - Centralized configuration system (dataclasses + ConfigLoader)
+- ✅ `vllm-dashboard.yaml.example` - YAML configuration template
+- ✅ `app/gpu_mon.py` - GPU VRAM auto-detection with multiple fallback methods
+- ✅ `app/podman_cli.py` - Updated with timeouts (IMAGE_PULL_TIMEOUT, CONTAINER_START_TIMEOUT)
+- ✅ `app/main.py` - Updated to initialize config + GPU VRAM + new `/api/config` endpoint
+- ✅ `.env.example` - Added timeout parameters
+
+**Cliente Integration:**
+- ✅ `CLIENT_INTEGRATION_GUIDE.md` - Complete guide for remote clients
+
+---
+
+## 🎯 NOTA SULLA STRATEGIA DI SICUREZZA
+
+Questo progetto è **pensato per rete locale + Tailscale**, non è un servizio internet pubblico.
+
+**Philosophia corretta:**
+- ✅ **Inferenza** (`/v1/chat/completions`) = Pubblica sulla LAN (è il prodotto)
+- ✅ **Dashboard** (`/`) = CORS permesso per localhost + LAN + Tailscale
+- 🔐 **Operazioni sensibili** (`/api/start`, `/api/pull`) = Richiedono API Key (proteggono risorse)
+- 🔐 **Input Validation** = Stricta su model_name e extra_args (previene injection)
+
+**Questo significa:**
+- ❌ **NON** bloccare Open WebUI/Continue/Jan che fanno inferenza dalla LAN
+- ❌ **NON** richiedere API Key per `/v1/chat/completions` (client mobile, browser, etc)
+- ✅ **SÌ** proteggere chi può avviare/stoppare/pullare (solo API Key)
+- ✅ **SÌ** validare tutti gli input (model_name, extra_args)
+
+---
+
 ## 📋 INDICE PROBLEMATICHE
 
 | Categoria | Severità | Conteggio |
@@ -1401,11 +1447,11 @@ pytest tests/ -v --cov=app
 ## 📋 PIANO DI IMPLEMENTAZIONE PRIORITIZZATO
 
 ### **FASE 1 - CRITICA (Sicurezza) - Tempo: 3-4 ore**
-- [ ] 1️⃣ **CORS Smart Config** - Auto-detect LAN + Tailscale + API Key per operazioni sensibili
-- [ ] 2️⃣ **Input Validation** - validators.py con whitelist flag + no path traversal
-- [ ] 3️⃣ **Thread-Safe Queue** - EventBroadcaster per logs
-- [ ] 4️⃣ **Exception Logging** - Structured logging setup
-- [ ] ✅ **Network Compatibility** - Verificato: rete locale + Tailscale funzionano
+- [x] 1️⃣ **CORS Smart Config** - Auto-detect LAN + Tailscale + API Key per operazioni sensibili ✅ IMPLEMENTATO
+- [x] 2️⃣ **Input Validation** - validators.py con whitelist flag + no path traversal ✅ IMPLEMENTATO
+- [x] 3️⃣ **Thread-Safe Queue** - EventBroadcaster per logs ✅ IMPLEMENTATO
+- [x] 4️⃣ **Exception Logging** - Structured logging setup ✅ IMPLEMENTATO (logging_config.py)
+- [x] ✅ **Network Compatibility** - Verificato: rete locale + Tailscale funzionano ✅ VERIFICATO
 
 ### **FASE 2 - ARCHITETTURA (Robustezza) - Tempo: 4-5 ore**
 - [ ] 6️⃣ **Config System** - config.py + config.yaml
@@ -1487,6 +1533,31 @@ docs/
 5. **Monitoring:** Esponi metriche Prometheus se vuoi scale
 6. **CI/CD:** GitHub Actions per testing + linting
 7. **Production Mode:** `reload=False` in systemd!
+
+---
+
+## 🚀 FASE 2-5 - ROADMAP FUTURO
+
+### **FASE 2 - ARCHITETTURA (Config Management) - Tempo: 2-3 ore**
+- [x] 1️⃣ **Centralized Config** - `app/config.py` per tutti i parametri (ora hardcoded) ✅ IMPLEMENTATO
+- [x] 2️⃣ **YAML Config File** - Supporto file `vllm-dashboard.yaml` per settings ✅ IMPLEMENTATO
+- [x] 3️⃣ **GPU Auto-Detect** - Dynamic VRAM detection (sostituisce hardcoded 16GB) ✅ IMPLEMENTATO
+- [x] 4️⃣ **Process Cleanup** - Timeout su container startup + graceful shutdown ✅ IMPLEMENTATO
+
+### **FASE 3 - PERFORMANCE (Caching & Optimization) - Tempo: 2 ore**
+- [ ] 1️⃣ **Model Metadata Cache** - Cache `scan_models()` risultati (refresh ogni 30s)
+- [ ] 2️⃣ **Health Check Polling** - Reduce `/api/status` calls (cache 5s)
+- [ ] 3️⃣ **Log Streaming Optimization** - Tail buffer per nuovi subscribers
+
+### **FASE 4 - UX (Client-Side Validation) - Tempo: 1-2 ore**
+- [ ] 1️⃣ **JavaScript Validation** - Validazione input nel browser (mirror server-side)
+- [ ] 2️⃣ **Toast Notifications** - Success/error messages con auto-dismiss
+- [ ] 3️⃣ **Loading States** - Visual feedback durante operazioni lunghe
+
+### **FASE 5 - DEPLOYMENT (Scripts & Config) - Tempo: 1 ora**
+- [ ] 1️⃣ **Systemd Enhancement** - EnvironmentFile per .env config
+- [ ] 2️⃣ **Backup Scripts** - Backup modelli + config
+- [ ] 3️⃣ **Health Monitor** - Script di healthcheck per monitoring
 
 ---
 

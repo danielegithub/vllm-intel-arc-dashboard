@@ -2,6 +2,7 @@ import asyncio
 import json
 import urllib.request
 import urllib.error
+import os
 from pathlib import Path
 import httpx
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, HTTPException
@@ -9,6 +10,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from dotenv import load_dotenv
 
 from app.podman_cli import (
     scan_models,
@@ -18,22 +20,67 @@ from app.podman_cli import (
     pull_image,
     stream_logs
 )
-from app.gpu_mon import get_system_telemetry
+from app.gpu_mon import get_system_telemetry, detect_gpu_vram, set_gpu_vram
+from app.validators import validate_model_name, validate_and_sanitize_extra_args, ValidationError
+from app.security import SecurityConfig, log_denied_request
+from app.logging_config import logger
+from app.config import get_config
+
+# Load environment variables
+load_dotenv()
+
+# Initialize configuration
+config = get_config()
+logger.info(f"Configuration loaded from: {config._config_file if config._config_file else 'defaults + environment'}")
+
+# Auto-detect GPU VRAM if not set
+if config.gpu.total_vram_mb is None:
+    logger.info("Auto-detecting GPU VRAM...")
+    detected_vram = detect_gpu_vram()
+    config.gpu.total_vram_mb = detected_vram
+    set_gpu_vram(detected_vram)
+else:
+    set_gpu_vram(config.gpu.total_vram_mb)
+    logger.info(f"Using configured GPU VRAM: {config.gpu.total_vram_mb}MB")
 
 app = FastAPI(
     title="Intel Arc vLLM Server & Manager (Ollama & OpenAI Compatible)",
     description="Local AI inference server for Intel Arc GPUs with OpenAI & Ollama API compatibility",
-    version="1.3.0"
+    version="1.3.0",
+    docs_url="/docs",
+    redoc_url="/redoc"
 )
 
-# Enable CORS for local network clients (Open WebUI, Jan, Continue, etc.)
+# Smart CORS: Allow dashboard on local network + Tailscale
+# Restrict to prevent XSS attacks from internet
+logger.info(f"CORS allowed origins: {SecurityConfig.DASHBOARD_ORIGINS}")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=SecurityConfig.DASHBOARD_ORIGINS,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "X-API-Key"],
 )
+
+# Middleware: Verify API Key for protected endpoints
+@app.middleware("http")
+async def verify_protected_operations(request: Request, call_next):
+    """Verify API Key for operations that consume server resources."""
+    
+    # Check if this endpoint requires API key
+    if SecurityConfig.require_api_key_for_endpoint(request.url.path, request.method):
+        # Get API key from header
+        api_key = request.headers.get("X-API-Key", "")
+        
+        # Verify the key
+        if not SecurityConfig.verify_api_key(api_key):
+            logger.warning(f"Unauthorized access to {request.method} {request.url.path} - invalid/missing API key")
+            return JSONResponse(
+                {"error": "Unauthorized - API Key required"},
+                status_code=401
+            )
+    
+    return await call_next(request)
 
 BASE_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
@@ -146,6 +193,14 @@ async def get_status():
     """
     return get_container_status()
 
+@app.get("/api/config")
+async def get_app_config():
+    """
+    Returns current application configuration (non-sensitive data only).
+    Does not expose API_KEY.
+    """
+    return config.to_dict()
+
 @app.post("/api/image/pull")
 async def api_pull_image():
     """
@@ -160,14 +215,36 @@ async def api_pull_image():
 async def api_start_model(req: StartModelRequest):
     """
     Starts vLLM Podman container with the specified model and options.
+    
+    Requires X-API-Key header for security.
     """
+    # Validate input
+    try:
+        validate_model_name(req.model_name)
+        safe_extra_args = validate_and_sanitize_extra_args(req.extra_args)
+    except ValidationError as e:
+        logger.warning(f"Input validation failed: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Invalid input: {str(e)}")
+    
+    # Validate max_model_len
+    if req.max_model_len < 128 or req.max_model_len > 8192:
+        raise HTTPException(
+            status_code=400,
+            detail="max_model_len must be between 128 and 8192"
+        )
+    
+    logger.info(f"Starting model: {req.model_name}")
+    
     res = await start_container(
         model_name=req.model_name,
         max_model_len=req.max_model_len,
-        extra_args=req.extra_args
+        extra_args=" ".join(safe_extra_args) if safe_extra_args else ""
     )
     if not res["success"]:
+        logger.error(f"Failed to start model {req.model_name}: {res['message']}")
         raise HTTPException(status_code=400, detail=res["message"])
+    
+    logger.info(f"Model {req.model_name} started successfully")
     return res
 
 @app.post("/api/stop")

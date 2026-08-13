@@ -1,0 +1,72 @@
+# vLLM Intel Arc Dashboard - YAML Configuration
+# This file is optional - environment variables take precedence
+# Copy and customize this file as needed
+
+server:
+  # Server host (0.0.0.0 = accessible from network)
+  host: "0.0.0.0"
+  
+  # Server port
+  port: 5000
+  
+  # Enable hot-reload on code changes (dev only)
+  reload: false
+  
+  # Logging level (DEBUG, INFO, WARNING, ERROR)
+  log_level: "INFO"
+  
+  # Graceful shutdown timeout in seconds
+  timeout_graceful_shutdown: 2
+
+gpu:
+  # GPU memory utilization (0.0 - 1.0)
+  # 0.70 = use 70% of available VRAM, leave 30% for OS
+  memory_utilization: 0.70
+  
+  # Model dtype (float16, float32, bfloat16)
+  # float16 = better performance, lower precision
+  dtype: "float16"
+  
+  # Default maximum model length (tokens)
+  max_model_len: 2048
+  
+  # GPU VRAM in MB (auto-detected if not set)
+  # Leave as null to auto-detect Intel Arc VRAM
+  total_vram_mb: null
+
+podman:
+  # Container name for vLLM
+  container_name: "vllm-intel-arc"
+  
+  # Docker image to use
+  image_name: "docker.io/intel/vllm:0.17.0-xpu"
+  
+  # Timeout for pulling image (seconds)
+  image_pull_timeout: 600
+  
+  # Timeout for starting container (seconds)
+  container_start_timeout: 120
+  
+  # Timeout for stopping container (seconds)
+  container_stop_timeout: 30
+
+model:
+  # Directory where models are stored
+  models_dir: "~/my_models"
+  
+  # Auto-load a default model on startup
+  auto_load_default_model: false
+  
+  # Default model to load (if auto_load_default_model is true)
+  default_model: null
+
+security:
+  # API Key for protected operations (leave empty to disable)
+  # Generate: openssl rand -hex 32
+  api_key: ""
+  
+  # Enable CORS (should be true for network access)
+  enable_cors: true
+  
+  # CORS origins (auto-detected if empty)
+  cors_origins: []
