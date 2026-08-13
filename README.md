@@ -1,6 +1,6 @@
-# ⚡ vLLM Intel GPU Manager (Podman & Systemd)
+# ⚡ vLLM Intel Arc Dashboard (`vllm-intel-arc-dashboard`)
 
-**vLLM Intel GPU Manager** è un'applicazione Web reattiva e completamente automatizzata per eseguire e gestire Modelli Linguistici (LLM) tramite **vLLM** accelerato da **GPU Intel** (discrete ed integrate) su Linux.
+**vLLM Intel Arc Dashboard** è un'applicazione Web reattiva e completamente automatizzata per eseguire e gestire Modelli Linguistici (LLM) tramite **vLLM** accelerato da **GPU Intel** (discrete ed integrate) su Linux.
 
 L'applicazione trasforma il tuo computer in un server di inferenza locale compatibile con le **API OpenAI**, fornendo una Dashboard Web ed un servizio di background **Systemd** che si avvia automaticamente all'accensione del PC.
 
@@ -22,8 +22,8 @@ Lo script compie automaticamente **tutti** i passaggi necessari:
 
 ### 1. Clona la repository Git
 ```bash
-git clone https://github.com/tuo-utente/vllm-intel-dashboard.git
-cd vllm-intel-dashboard
+git clone https://github.com/tuo-utente/vllm-intel-arc-dashboard.git
+cd vllm-intel-arc-dashboard
 ```
 
 ### 2. Esegui la Configurazione Automatica (Una Tantum)
