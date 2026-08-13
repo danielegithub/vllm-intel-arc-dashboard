@@ -1469,17 +1469,17 @@ pytest tests/ -v --cov=app
 - [x] 1️⃣6️⃣ **Polling Optimization** - Exponential backoff per `wait_for_vllm_ready()` ✅ IMPLEMENTATO
 
 ### **FASE 4 - UX & DOCUMENTATION - Tempo: 3-4 ore**
-- [ ] 1️⃣7️⃣ **Backup Scripts** - backup_models.sh
+- [x] 1️⃣7️⃣ **Backup Scripts** - backup_models.sh & restore_models.sh ✅ IMPLEMENTATO
 - [x] 1️⃣8️⃣ **API Docs** - Swagger UI (/docs) & ReDoc (/redoc) + OpenAPI ✅ IMPLEMENTATO
-- [ ] 1️⃣9️⃣ **Input Validation JS** - Client-side checks
-- [ ] 2️⃣0️⃣ **Loading States** - Button feedback
-- [ ] 2️⃣1️⃣ **Toast Notifications** - Error messages
+- [x] 1️⃣9️⃣ **Input Validation JS** - Client-side checks (validateStartRequest) ✅ IMPLEMENTATO
+- [x] 2️⃣0️⃣ **Loading States** - Visual button feedback during operations ✅ IMPLEMENTATO
+- [x] 2️⃣1️⃣ **Toast Notifications** - Toast popups in UI (showToast) ✅ IMPLEMENTATO
 
-### **FASE 5 - CONFIGURAZIONE - Tempo: 2-3 ore**
+### **FASE 5 - CONFIGURAZIONE & TESTING - Tempo: 2-3 ore**
 - [x] 2️⃣2️⃣ **Config File** - YAML support (vllm-dashboard.yaml) ✅ IMPLEMENTATO
 - [x] 2️⃣3️⃣ **.env File** - Environment variables template (.env.example) ✅ IMPLEMENTATO
 - [x] 2️⃣4️⃣ **Systemd Service** - Updated unit file with PATH & venv ✅ IMPLEMENTATO
-- [ ] 2️⃣5️⃣ **Tests** - pytest suite
+- [x] 2️⃣5️⃣ **Tests** - Suite completa pytest in tests/ (10/10 passed) ✅ IMPLEMENTATO
 
 **Tempo Totale Stima:** 15-20 ore di sviluppo
 
