@@ -21,23 +21,26 @@ Chiunque scarichi questo progetto da Git ha bisogno soltanto di 3 cose:
 I modelli di Intelligenza Artificiale devono essere salvati dentro la cartella `~/my_models`. 
 Puoi scaricarli facilmente in **due modi**:
 
-### Metodo A: Usando lo script automatico del progetto (CONSIGLIATO)
-Abbiamo incluso lo script `./download_model.sh` che scarica automaticamente i modelli da Hugging Face dentro `~/my_models`:
+### Metodo A: Usando lo script interattivo del progetto (CONSIGLIATO)
+Esegui semplicemente lo script `./download_model.sh`:
 
 ```bash
-# Esempio 1: Scaricare Qwen 2.5 Coder 14B AWQ
-./download_model.sh Qwen/Qwen2.5-Coder-14B-Instruct-AWQ Qwen2.5-Coder-14B-AWQ
+./download_model.sh
+```
 
-# Esempio 2: Scaricare Gemma 2 9B AWQ
-./download_model.sh casperhansen/gemma-2-9b-it-awq Gemma-2-9B-AWQ
+Lo script mostrerà un menu interattivo con i modelli verificati per Intel Arc B580 / 16GB VRAM:
+1. `Qwen2.5-Coder-14B-Instruct-AWQ` (Specializzato in Codice)
+2. `Qwen2.5-14B-Instruct-AWQ` (Generale 14B)
+3. `gemma-2-9b-it-awq` (Google Gemma 2 9B)
+4. `Qwen2.5-7B-Instruct` (Generale 7B)
+5. *Oppure inserire un Repo ID personalizzato*.
 
-# Esempio 3: Scaricare Qwen 2.5 7B Instruct
-./download_model.sh Qwen/Qwen2.5-7B-Instruct Qwen2.5-7B
+In alternativa puoi passare direttamente i parametri da linea di comando:
+```bash
+./download_model.sh Qwen/Qwen2.5-14B-Instruct-AWQ Qwen2.5-14B-AWQ
 ```
 
 ### Metodo B: Usando direttamente il comando Podman
-Se preferisci lanciarlo manualmente da terminale:
-
 ```bash
 # Download Qwen2.5-Coder-14B-AWQ
 podman run --rm -it \
@@ -45,11 +48,11 @@ podman run --rm -it \
   docker.io/library/python:3.11-slim \
   bash -c "pip install --no-cache-dir huggingface_hub && hf download Qwen/Qwen2.5-Coder-14B-Instruct-AWQ --local-dir /download/Qwen2.5-Coder-14B-AWQ"
 
-# Download Gemma-2-9B-AWQ
+# Download Qwen2.5-14B-AWQ
 podman run --rm -it \
   -v ~/my_models:/download \
   docker.io/library/python:3.11-slim \
-  bash -c "pip install --no-cache-dir huggingface_hub && hf download casperhansen/gemma-2-9b-it-awq --local-dir /download/Gemma-2-9B-AWQ"
+  bash -c "pip install --no-cache-dir huggingface_hub && hf download Qwen/Qwen2.5-14B-Instruct-AWQ --local-dir /download/Qwen2.5-14B-AWQ"
 ```
 
 ---
@@ -70,7 +73,7 @@ cd vllm-intel-dashboard
 
 ### 3. Scarica un Modello LLM
 ```bash
-./download_model.sh Qwen/Qwen2.5-Coder-14B-Instruct-AWQ Qwen2.5-Coder-14B-AWQ
+./download_model.sh
 ```
 
 ### 4. Apri la Dashboard nel Browser
@@ -93,8 +96,6 @@ Vai a: 👉 **[http://localhost:5000](http://localhost:5000)**
 ---
 
 ## 🛠️ Comandi di Gestione Systemd
-
-L'app funziona in background come servizio di sistema. Se vuoi controllarla da terminale:
 
 ```bash
 # Verificare lo stato del servizio
