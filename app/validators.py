@@ -58,14 +58,23 @@ def validate_and_sanitize_extra_args(extra_args: str) -> List[str]:
     Uses a whitelist of allowed flags to prevent shell injection and
     unintended command execution.
     
-    Allowed flags:
-    - --dtype (float16, float32, bfloat16)
+    Allowed flags include:
+    - --dtype (float16, float32, bfloat16, float8, int8)
     - --gpu-memory-utilization (0.0-1.0)
     - --max-model-len (integer)
     - --tensor-parallel-size (integer)
     - --pipeline-parallel-size (integer)
     - --num-scheduler-steps (integer)
     - --max-num-seqs (integer)
+    - --quantization (awq, gptq, marlin, bitsandbytes, fp8, etc.)
+    - --enforce-eager
+    - --trust-remote-code
+    - --enable-lora
+    - --block-size (integer)
+    - --swap-space (integer)
+    - --seed (integer)
+    - --kv-cache-dtype (auto, fp8, etc.)
+    - --device (xpu, cpu, auto)
     
     Args:
         extra_args: Space-separated extra arguments
@@ -91,6 +100,18 @@ def validate_and_sanitize_extra_args(extra_args: str) -> List[str]:
         "--max-model-seq-len",
         "--enable-lora",
         "--trust-remote-code",
+        "--enforce-eager",
+        "--quantization",
+        "--served-model-name",
+        "--chat-template",
+        "--response-role",
+        "--device",
+        "--block-size",
+        "--swap-space",
+        "--seed",
+        "--kv-cache-dtype",
+        "--load-format",
+        "--distributed-executor-backend",
     }
     
     # Forbidden shell metacharacters that could lead to injection
@@ -135,10 +156,9 @@ def validate_and_sanitize_extra_args(extra_args: str) -> List[str]:
                     raise ValidationError(f"Invalid value for {flag}: {value}")
                 result.append(token)
             else:
-                # Value might be in next token
+                # Value might be in next token if flag expects an argument
                 result.append(token)
                 if i + 1 < len(tokens) and not tokens[i + 1].startswith("--"):
-                    # Next token is the value
                     value = tokens[i + 1]
                     if not _is_valid_flag_value(flag, value):
                         raise ValidationError(f"Invalid value for {flag}: {value}")
@@ -173,7 +193,7 @@ def _is_valid_flag_value(flag: str, value: str) -> bool:
     # Flag-specific validations
     if flag == "--dtype":
         allowed_dtypes = {"float16", "float32", "bfloat16", "float8", "int8"}
-        return value in allowed_dtypes
+        return value.lower() in allowed_dtypes
     
     elif flag == "--gpu-memory-utilization":
         try:
@@ -188,16 +208,29 @@ def _is_valid_flag_value(flag: str, value: str) -> bool:
         "--pipeline-parallel-size",
         "--num-scheduler-steps",
         "--max-num-seqs",
-        "--max-model-seq-len"
+        "--max-model-seq-len",
+        "--block-size",
+        "--swap-space",
+        "--seed"
     }:
         try:
             val = int(value)
-            return val > 0
+            return val >= 0
         except ValueError:
             return False
     
-    elif flag in {"--enable-lora", "--trust-remote-code"}:
+    elif flag == "--quantization":
+        allowed_quant = {"awq", "gptq", "squeezellm", "marlin", "bitsandbytes", "fp8", "compressed-tensors"}
+        return value.lower() in allowed_quant
+        
+    elif flag in {"--enable-lora", "--trust-remote-code", "--enforce-eager"}:
         return value.lower() in {"true", "false"}
+
+    elif flag == "--kv-cache-dtype":
+        return value.lower() in {"auto", "fp8", "fp8_e5m2", "fp8_e4m3"}
     
-    # Default: allow if it matches basic pattern
+    elif flag == "--device":
+        return value.lower() in {"auto", "xpu", "cpu", "cuda", "neuron", "openvino", "tpu"}
+    
+    # Default: allow if it matches basic safe pattern
     return True

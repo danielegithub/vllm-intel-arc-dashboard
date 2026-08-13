@@ -51,15 +51,13 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# Smart CORS: Allow dashboard on local network + Tailscale
-# Restrict to prevent XSS attacks from internet
-logger.info(f"CORS allowed origins: {SecurityConfig.DASHBOARD_ORIGINS}")
+# CORS: Allow local network, Tailscale, Open WebUI, and desktop AI clients
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=SecurityConfig.DASHBOARD_ORIGINS,
+    allow_origins=["*"],
     allow_credentials=False,
-    allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type", "X-API-Key"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Middleware: Verify API Key for protected endpoints
@@ -164,7 +162,7 @@ async def ensure_model_running(requested_model_name: str = None) -> str:
             return target_model
 
     # Case 2: Different model is running or container is stopped -> Auto-switch/start
-    start_res = await start_container(model_name=target_model, max_model_len=2048)
+    start_res = await start_container(model_name=target_model, max_model_len=config.gpu.max_model_len)
     if not start_res.get("success"):
         raise HTTPException(
             status_code=500,
@@ -219,12 +217,12 @@ async def health_check():
     Kubernetes-style health check endpoint.
     Checks status of vLLM server, Podman executable, and filesystem directory.
     """
-    from datetime import datetime
+    from datetime import datetime, timezone
     import subprocess
     
     checks = {
         "status": "ok",
-        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "checks": {}
     }
     
@@ -316,20 +314,61 @@ async def api_stop_container():
     return res
 
 @app.post("/api/chat")
-async def api_test_chat(req: ChatRequest):
+async def api_test_chat(request: Request):
     """
-    Proxies a test chat completion request to http://localhost:8000/v1/chat/completions.
-    Auto-starts default model if no container is running.
+    Dual-mode chat endpoint:
+    1. If called by Dashboard UI: expects {"prompt": "...", "temperature": 0.7, "max_tokens": 512}
+    2. If called by Ollama/OpenAI clients: expects {"model": "...", "messages": [...], "stream": bool}
     """
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Formato JSON non valido.")
+
+    # Check if this is an Ollama/OpenAI chat request (has 'messages')
+    if "messages" in body:
+        requested_model = body.get("model")
+        active_model = await ensure_model_running(requested_model)
+        body["model"] = "/workspace/model"
+        is_stream = body.get("stream", False)
+        vllm_target = "http://localhost:8000/v1/chat/completions"
+
+        if is_stream:
+            async def stream_generator():
+                try:
+                    async with httpx.AsyncClient(timeout=120.0) as client:
+                        async with client.stream("POST", vllm_target, json=body) as resp:
+                            async for chunk in resp.aiter_bytes():
+                                yield chunk
+                except Exception as e:
+                    err_payload = json.dumps({"error": str(e)}).encode()
+                    yield f"data: {err_payload}\n\n".encode()
+
+            return StreamingResponse(stream_generator(), media_type="text/event-stream")
+        else:
+            try:
+                async with httpx.AsyncClient(timeout=120.0) as client:
+                    resp = await client.post(vllm_target, json=body)
+                    return JSONResponse(status_code=resp.status_code, content=resp.json())
+            except httpx.ConnectError:
+                raise HTTPException(status_code=503, detail="Impossibile connettersi al server vLLM. Il modello si sta ancora avviando.")
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+
+    # Otherwise, handle dashboard test chat format
+    prompt = body.get("prompt", "")
+    max_tokens = int(body.get("max_tokens", 512))
+    temperature = float(body.get("temperature", 0.7))
+
     active_model = await ensure_model_running()
 
     payload = {
         "model": "/workspace/model",
         "messages": [
-            {"role": "user", "content": req.prompt}
+            {"role": "user", "content": prompt}
         ],
-        "max_tokens": req.max_tokens,
-        "temperature": req.temperature
+        "max_tokens": max_tokens,
+        "temperature": temperature
     }
 
     try:
@@ -470,6 +509,63 @@ async def openai_completions(request: Request):
 # OLLAMA COMPATIBLE API ENDPOINTS (/api/tags, /api/ps, /api/show, /api/version)
 # Allows Ollama-compatible clients (e.g. Open WebUI, Obsidian Ollama plugin) to connect directly
 # =====================================================================
+
+@app.post("/api/generate")
+async def ollama_generate(request: Request):
+    """
+    Ollama-compatible /api/generate endpoint.
+    Supports auto-loading models and streaming/non-streaming responses.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Formato JSON non valido.")
+
+    requested_model = body.get("model")
+    await ensure_model_running(requested_model)
+
+    prompt = body.get("prompt", "")
+    is_stream = body.get("stream", False)
+    vllm_payload = {
+        "model": "/workspace/model",
+        "prompt": prompt,
+        "max_tokens": body.get("options", {}).get("num_predict", 512) if isinstance(body.get("options"), dict) else 512,
+        "temperature": body.get("options", {}).get("temperature", 0.7) if isinstance(body.get("options"), dict) else 0.7,
+        "stream": is_stream
+    }
+    vllm_target = "http://localhost:8000/v1/completions"
+
+    if is_stream:
+        async def stream_generator():
+            try:
+                async with httpx.AsyncClient(timeout=120.0) as client:
+                    async with client.stream("POST", vllm_target, json=vllm_payload) as resp:
+                        async for chunk in resp.aiter_bytes():
+                            yield chunk
+            except Exception as e:
+                err_payload = json.dumps({"error": str(e)}).encode()
+                yield f"data: {err_payload}\n\n".encode()
+
+        return StreamingResponse(stream_generator(), media_type="text/event-stream")
+    else:
+        try:
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                resp = await client.post(vllm_target, json=vllm_payload)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    choices = data.get("choices", [])
+                    text = choices[0].get("text", "") if choices else ""
+                    return {
+                        "model": requested_model or "vllm-intel-arc",
+                        "created_at": "2026-08-13T00:00:00Z",
+                        "response": text,
+                        "done": True
+                    }
+                return JSONResponse(status_code=resp.status_code, content=resp.json())
+        except httpx.ConnectError:
+            raise HTTPException(status_code=503, detail="Impossibile connettersi a vLLM. Il modello si sta avviando.")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/tags")
 async def ollama_tags():

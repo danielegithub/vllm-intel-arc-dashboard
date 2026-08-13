@@ -131,7 +131,7 @@ if [ -n "$REPO_ID" ]; then
     podman run --rm -it \
       -v "$MODELS_DIR":/download \
       docker.io/library/python:3.11-slim \
-      bash -c "pip install --no-cache-dir huggingface_hub && hf download '$REPO_ID' --local-dir '/download/$FOLDER_NAME'"
+      bash -c "pip install --no-cache-dir \"huggingface_hub[cli]\" && huggingface-cli download \"$REPO_ID\" --local-dir \"/download/$FOLDER_NAME\" --local-dir-use-symlinks False"
 
     echo ""
     echo "✅ Download completato: $DEST_PATH"

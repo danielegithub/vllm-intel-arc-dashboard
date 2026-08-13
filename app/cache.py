@@ -177,7 +177,7 @@ def get_cache() -> SimpleCache:
 
 # Pre-defined cache keys for common operations
 CACHE_KEYS = {
-    "models": "app.cache.models",              # scan_models() result
-    "status": "app.cache.status",              # container status
-    "gpu_telemetry": "app.cache.gpu_telemetry",  # GPU metrics
+    "models": "app.podman_cli.scan_models",                  # scan_models() result
+    "status": "app.podman_cli.get_container_status",        # container status
+    "gpu_telemetry": "app.gpu_mon.get_intel_gpu_vram",      # GPU metrics
 }

@@ -355,6 +355,8 @@ curl http://192.168.X.X:5000/v1/chat/completions \
 * `GET /api/tags`: Elenco modelli in formato nativo Ollama.
 * `GET /api/ps`: Modelli correntemente attivi in VRAM.
 * `GET /api/version`: Versione del server.
+* `POST /api/chat`: Endpoint chat dual-mode (supporta sia la test chat della dashboard che il formato nativo Ollama `messages`).
+* `POST /api/generate`: Generazione testo / completion in formato Ollama con supporto auto-loading e streaming.
 
 ### 6.4 Canali WebSocket in Tempo Reale
 * `ws://<SERVER-IP>:5000/ws/gpu`: Telemetria live della GPU Intel Arc (VRAM allocata, VRAM libera, % utilizzo) e del sistema host (CPU %, RAM host) inviata ogni secondo.

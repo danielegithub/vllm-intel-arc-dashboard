@@ -314,122 +314,67 @@ async def stream_logs() -> AsyncGenerator[str, None]:
     Asynchronously streams logs from podman logs -f vllm-intel-arc AND event broadcaster.
     
     Uses the EventBroadcaster to receive system events (container start, image pull, etc.)
-    along with live container logs.
+    along with live container logs concurrently into a unified stream.
     """
-    has_warned_missing = False
+    merge_queue: asyncio.Queue = asyncio.Queue()
     
-    # Subscribe to events
-    async for msg in log_broadcaster.subscribe():
-        yield msg
-        
-        # Also check for new container logs
-        status = get_container_status()
-        if status.get("exists") and status.get("running"):
-            # Container is running, start streaming logs
-            break
-        
-        # Keep yielding broadcaster messages until container starts
-    
-    # Once container is running, stream logs combined with broadcaster events
-    task_broadcaster = None
-    task_container = None
-    
-    try:
-        # Create separate tasks for broadcaster and container logs
-        async def broadcast_listener():
-            """Listen for broadcast events and yield them"""
+    async def broadcast_task():
+        """Listen for broadcast events and forward to merge_queue"""
+        try:
             async for msg in log_broadcaster.subscribe():
-                yield msg
-        
-        async def container_listener():
-            """Listen for container logs"""
-            while True:
-                status = get_container_status()
-                if not status.get("exists"):
-                    yield "[SISTEMA] Container 'vllm-intel-arc' non più disponibile.\n"
-                    await asyncio.sleep(2.0)
-                    continue
-                
-                cmd = ["podman", "logs", "-f", "--tail", "50", CONTAINER_NAME]
-                try:
-                    proc = await asyncio.create_subprocess_exec(
-                        *cmd,
-                        stdout=asyncio.subprocess.PIPE,
-                        stderr=asyncio.subprocess.STDOUT
-                    )
-                    
-                    while True:
-                        try:
-                            line = await asyncio.wait_for(proc.stdout.readline(), timeout=2.0)
-                            if not line:
-                                break
-                            yield line.decode("utf-8", errors="replace")
-                        except asyncio.TimeoutError:
-                            pass
-                except Exception as e:
-                    yield f"[LOG STREAM ERROR] {str(e)}\n"
-                    await asyncio.sleep(2.0)
-        
-        # Merge both streams
-        broadcast_gen = broadcast_listener()
-        container_gen = container_listener()
-        
-        # Use a queue to merge streams
-        merge_queue: asyncio.Queue = asyncio.Queue()
-        
-        async def broadcast_task():
-            try:
-                async for msg in broadcast_gen:
-                    await merge_queue.put(("broadcast", msg))
-            except asyncio.CancelledError:
-                pass
-            except Exception as e:
-                logger.error(f"Broadcast listener error: {e}")
-        
-        async def container_task():
-            try:
-                async for msg in container_gen:
-                    await merge_queue.put(("container", msg))
-            except asyncio.CancelledError:
-                pass
-            except Exception as e:
-                logger.error(f"Container listener error: {e}")
-        
-        task_broadcaster = asyncio.create_task(broadcast_task())
-        task_container = asyncio.create_task(container_task())
-        
+                await merge_queue.put(msg)
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.debug(f"Broadcast task exception: {e}")
+
+    async def container_task():
+        """Continuously follow container logs whenever container is running"""
         while True:
             try:
-                source, msg = await asyncio.wait_for(merge_queue.get(), timeout=5.0)
-                yield msg
-            except asyncio.TimeoutError:
-                # Check if container still exists
                 status = get_container_status()
-                if not status.get("exists"):
-                    yield "[SISTEMA] Container 'vllm-intel-arc' arrestato.\n"
-                    break
-    
-    except asyncio.CancelledError:
-        logger.debug("Stream logs cancelled")
-        raise
-    except Exception as e:
-        logger.error(f"Stream logs error: {e}")
-        yield f"[LOG STREAM ERROR] {str(e)}\n"
-    
+                if not status.get("running"):
+                    await asyncio.sleep(1.0)
+                    continue
+
+                cmd = ["podman", "logs", "-f", "--tail", "50", CONTAINER_NAME]
+                proc = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.STDOUT
+                )
+
+                while True:
+                    line = await proc.stdout.readline()
+                    if not line:
+                        break
+                    decoded = line.decode("utf-8", errors="replace")
+                    await merge_queue.put(decoded)
+
+                await proc.wait()
+                await asyncio.sleep(1.0)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                await merge_queue.put(f"[LOG STREAM] Errore lettura log: {str(e)}\n")
+                await asyncio.sleep(2.0)
+
+    task_b = asyncio.create_task(broadcast_task())
+    task_c = asyncio.create_task(container_task())
+
+    try:
+        while True:
+            msg = await merge_queue.get()
+            yield msg
+    except (asyncio.CancelledError, GeneratorExit):
+        pass
     finally:
-        # Cleanup tasks
-        if task_broadcaster and not task_broadcaster.done():
-            task_broadcaster.cancel()
-            try:
-                await task_broadcaster
-            except asyncio.CancelledError:
-                pass
-        if task_container and not task_container.done():
-            task_container.cancel()
-            try:
-                await task_container
-            except asyncio.CancelledError:
-                pass
+        task_b.cancel()
+        task_c.cancel()
+        try:
+            await asyncio.gather(task_b, task_c, return_exceptions=True)
+        except Exception:
+            pass
 
 
 # ============================================================================
