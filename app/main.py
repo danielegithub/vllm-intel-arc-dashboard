@@ -95,20 +95,32 @@ class ChatRequest(BaseModel):
     max_tokens: int = 512
     temperature: float = 0.7
 
-async def wait_for_vllm_ready(timeout_secs: int = 60) -> bool:
+async def wait_for_vllm_ready(timeout_secs: int = 120, initial_delay: float = 0.5) -> bool:
     """
-    Polls http://localhost:8000/v1/models until vLLM API server is ready to accept requests.
+    Polls http://localhost:8000/v1/models with exponential backoff until vLLM API server is ready to accept requests.
+    Initial delay: 0.5s, increases up to max 4.0s.
     """
     start_time = asyncio.get_event_loop().time()
+    delay = initial_delay
     async with httpx.AsyncClient(timeout=3.0) as client:
         while asyncio.get_event_loop().time() - start_time < timeout_secs:
             try:
                 resp = await client.get("http://localhost:8000/v1/models")
                 if resp.status_code == 200:
+                    elapsed = round(asyncio.get_event_loop().time() - start_time, 2)
+                    logger.info(f"vLLM API server is ready after {elapsed}s!")
                     return True
             except Exception:
                 pass
-            await asyncio.sleep(2.0)
+            
+            elapsed = asyncio.get_event_loop().time() - start_time
+            remaining = timeout_secs - elapsed
+            sleep_time = min(delay, max(0.1, remaining))
+            if sleep_time > 0:
+                await asyncio.sleep(sleep_time)
+            delay = min(delay * 1.5, 4.0)
+            
+    logger.error(f"vLLM API server not ready after {timeout_secs}s")
     return False
 
 async def ensure_model_running(requested_model_name: str = None) -> str:
@@ -200,6 +212,54 @@ async def get_app_config():
     Does not expose API_KEY.
     """
     return config.to_dict()
+
+@app.get("/health", response_class=JSONResponse)
+async def health_check():
+    """
+    Kubernetes-style health check endpoint.
+    Checks status of vLLM server, Podman executable, and filesystem directory.
+    """
+    from datetime import datetime
+    import subprocess
+    
+    checks = {
+        "status": "ok",
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "checks": {}
+    }
+    
+    # Check vLLM API server connectivity
+    status = get_container_status()
+    if status.get("running"):
+        try:
+            async with httpx.AsyncClient(timeout=2.0) as client:
+                resp = await client.get("http://localhost:8000/v1/models")
+                checks["checks"]["vllm_server"] = "up" if resp.status_code == 200 else "loading"
+        except Exception:
+            checks["checks"]["vllm_server"] = "loading"
+    else:
+        checks["checks"]["vllm_server"] = "stopped"
+        
+    # Check Podman CLI availability
+    try:
+        res = subprocess.run(["podman", "version"], capture_output=True, text=True, timeout=2)
+        checks["checks"]["podman"] = "up" if res.returncode == 0 else "error"
+    except Exception:
+        checks["checks"]["podman"] = "error"
+        
+    # Check models directory access
+    try:
+        models_dir = config.model.models_dir
+        checks["checks"]["models_directory"] = "up" if models_dir.exists() else "missing"
+    except Exception:
+        checks["checks"]["models_directory"] = "error"
+
+    # Overall health determination
+    is_healthy = checks["checks"].get("podman") == "up" and checks["checks"].get("models_directory") == "up"
+    status_code = 200 if is_healthy else 503
+    checks["status"] = "ok" if is_healthy else "unhealthy"
+    
+    return JSONResponse(content=checks, status_code=status_code)
 
 @app.post("/api/image/pull")
 async def api_pull_image():

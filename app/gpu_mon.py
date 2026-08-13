@@ -92,6 +92,8 @@ def detect_gpu_vram() -> int:
     return DEFAULT_TOTAL_VRAM_MB
 
 
+from app.cache import cache
+
 def set_gpu_vram(vram_mb: int):
     """Set the GPU VRAM value (for testing or manual override)."""
     global TOTAL_VRAM_MB
@@ -99,6 +101,7 @@ def set_gpu_vram(vram_mb: int):
     logger.info(f"GPU VRAM set to: {vram_mb}MB ({vram_mb/1024:.1f}GB)")
 
 
+@cache(ttl_seconds=1.0)
 def get_intel_gpu_vram() -> dict:
     """
     Scans Linux DRM fdinfo in /proc/*/fdinfo/* to sum VRAM allocations

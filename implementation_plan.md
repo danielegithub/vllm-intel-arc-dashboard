@@ -1454,31 +1454,32 @@ pytest tests/ -v --cov=app
 - [x] ✅ **Network Compatibility** - Verificato: rete locale + Tailscale funzionano ✅ VERIFICATO
 
 ### **FASE 2 - ARCHITETTURA (Robustezza) - Tempo: 4-5 ore**
-- [ ] 6️⃣ **Config System** - config.py + config.yaml
-- [ ] 7️⃣ **GPU Auto-Detect** - Dinamico VRAM totale
-- [ ] 8️⃣ **Structured Logging** - Logging module setup
-- [ ] 9️⃣ **Process Cleanup** - Signal handlers + atexit
-- [ ] 🔟 **Model Cache** - TTL-based cache
+- [x] 6️⃣ **Config System** - config.py + config.yaml ✅ IMPLEMENTATO
+- [x] 7️⃣ **GPU Auto-Detect** - Dinamico VRAM totale (detect_gpu_vram in gpu_mon.py) ✅ IMPLEMENTATO
+- [x] 8️⃣ **Structured Logging** - Logging module setup (logging_config.py) ✅ IMPLEMENTATO
+- [x] 9️⃣ **Process Cleanup** - Signal handlers + timeouts (IMAGE_PULL_TIMEOUT, CONTAINER_START_TIMEOUT) ✅ IMPLEMENTATO
+- [x] 🔟 **Model Cache** - TTL-based cache (app/cache.py) ✅ IMPLEMENTATO
 
 ### **FASE 3 - PERFORMANCE & FEATURES - Tempo: 3-4 ore**
-- [ ] 1️⃣1️⃣ **Polling Optimization** - Exponential backoff
-- [ ] 1️⃣2️⃣ **Stream Logs Efficiency** - Subscriber pattern
-- [ ] 1️⃣3️⃣ **Operation Timeouts** - Timeout parametri
-- [ ] 1️⃣4️⃣ **Health Check Endpoint** - /health endpoint
-- [ ] 1️⃣5️⃣ **Retry Logic** - Tenacity decorator
+- [x] 1️⃣1️⃣ **Model Metadata Cache** - Cache `scan_models()` (TTL 30s) + invalidazione ✅ IMPLEMENTATO
+- [x] 1️⃣2️⃣ **Container Status Cache** - Cache `get_container_status()` (TTL 5s) + invalidazione ✅ IMPLEMENTATO
+- [x] 1️⃣3️⃣ **Log Streaming Efficiency** - Subscriber pattern via EventBroadcaster ✅ IMPLEMENTATO
+- [x] 1️⃣4️⃣ **Operation Timeouts** - Timeout parametri pull e start ✅ IMPLEMENTATO
+- [x] 1️⃣5️⃣ **Health Check Endpoint** - Endpoint Kubernetes-style `/health` ✅ IMPLEMENTATO
+- [x] 1️⃣6️⃣ **Polling Optimization** - Exponential backoff per `wait_for_vllm_ready()` ✅ IMPLEMENTATO
 
 ### **FASE 4 - UX & DOCUMENTATION - Tempo: 3-4 ore**
-- [ ] 1️⃣6️⃣ **Backup Scripts** - backup_models.sh
-- [ ] 1️⃣7️⃣ **API Docs** - Swagger UI auto
-- [ ] 1️⃣8️⃣ **Input Validation JS** - Client-side checks
-- [ ] 1️⃣9️⃣ **Loading States** - Button feedback
-- [ ] 2️⃣0️⃣ **Toast Notifications** - Error messages
+- [ ] 1️⃣7️⃣ **Backup Scripts** - backup_models.sh
+- [x] 1️⃣8️⃣ **API Docs** - Swagger UI (/docs) & ReDoc (/redoc) + OpenAPI ✅ IMPLEMENTATO
+- [ ] 1️⃣9️⃣ **Input Validation JS** - Client-side checks
+- [ ] 2️⃣0️⃣ **Loading States** - Button feedback
+- [ ] 2️⃣1️⃣ **Toast Notifications** - Error messages
 
 ### **FASE 5 - CONFIGURAZIONE - Tempo: 2-3 ore**
-- [ ] 2️⃣1️⃣ **Config File** - YAML support
-- [ ] 2️⃣2️⃣ **.env File** - Environment variables
-- [ ] 2️⃣3️⃣ **Systemd Service** - Updated unit file
-- [ ] 2️⃣4️⃣ **Tests** - pytest suite
+- [x] 2️⃣2️⃣ **Config File** - YAML support (vllm-dashboard.yaml) ✅ IMPLEMENTATO
+- [x] 2️⃣3️⃣ **.env File** - Environment variables template (.env.example) ✅ IMPLEMENTATO
+- [x] 2️⃣4️⃣ **Systemd Service** - Updated unit file with PATH & venv ✅ IMPLEMENTATO
+- [ ] 2️⃣5️⃣ **Tests** - pytest suite
 
 **Tempo Totale Stima:** 15-20 ore di sviluppo
 
