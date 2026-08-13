@@ -29,7 +29,6 @@ echo "✅ Python dependencies installed successfully."
 # 3. Setup Systemd User Unit
 mkdir -p "$SYSTEMD_USER_DIR"
 
-# Escape spaces for systemd unit file paths
 ESCAPED_DIR="${PROJECT_DIR// /\\ }"
 
 cat <<EOF > "$SYSTEMD_USER_DIR/$SERVICE_NAME"
@@ -40,7 +39,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=$ESCAPED_DIR
-ExecStart=$ESCAPED_DIR/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 5000
+ExecStart=$ESCAPED_DIR/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 5000 --timeout-graceful-shutdown 2
 Restart=always
 RestartSec=3
 Environment=PYTHONUNBUFFERED=1
