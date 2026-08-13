@@ -1,8 +1,20 @@
-# ⚡ vLLM Intel Arc Dashboard (`vllm-intel-arc-dashboard`)
+# ⚡ vLLM Intel Arc Server & Manager (`vllm-intel-arc-dashboard`)
 
-**vLLM Intel Arc Dashboard** è un'applicazione Web reattiva e completamente automatizzata per eseguire e gestire Modelli Linguistici (LLM) tramite **vLLM** accelerato da **GPU Intel Arc** (B-Series, A-Series, Data Center e integrate) su Linux.
+**vLLM Intel Arc Server & Manager** è un'applicazione Web e Server API reattivo per eseguire e gestire Modelli Linguistici (LLM) tramite **vLLM** accelerato da **GPU Intel Arc** (B-Series B580/B570, A-Series A770/A750, Intel Core Ultra e Data Center GPU) su Linux.
 
-L'applicazione trasforma il tuo computer in un server di inferenza locale ad alte prestazioni compatibile con le **API OpenAI**, fornendo una Dashboard Web ed un servizio di background **Systemd** che si avvia automaticamente all'accensione del PC.
+L'applicazione trasforma il tuo PC in un server di inferenza locale compatibile sia con le **API OpenAI** (`/v1/...`) sia con le **API Ollama** (`/api/...`), accessibile da **qualsiasi dispositivo sulla tua rete LAN o via Tailscale** sulla porta **`5000`**.
+
+Include una Dashboard Web reattiva ed un servizio di background **Systemd** che si avvia automaticamente all'avvio del computer.
+
+---
+
+## 🔥 CARATTERISTICHE PRINCIPALI
+
+* **🤖 API Proxy "Stile Ollama" & OpenAI Compatibile (`:5000`)**: Espone endpoints universali `/v1/chat/completions`, `/v1/models`, `/api/tags`, `/api/ps` accessibili da qualsiasi client di rete.
+* **⚡ Auto-Loading & Auto-Switch dei Modelli**: Proprio come Ollama, quando un client di rete (Open WebUI, Continue, Jan, Cursor) richiede un modello presente in `~/my_models`, il server lo carica o lo sostituisce automaticamente in VRAM!
+* **🌍 Accesso da Rete Locale & Tailscale**: In ascolto su `0.0.0.0:5000` con CORS completamente abilitato.
+* **📊 Telemetria VRAM Live**: Monitoraggio in tempo reale del consumo di VRAM della GPU Intel Arc tramite WebSocket.
+* **📜 Live Log Streamer**: Visualizza i log di vLLM (`podman logs -f`) in tempo reale direttamente nel browser.
 
 ---
 
@@ -36,7 +48,28 @@ Vai a: 👉 **[http://localhost:5000](http://localhost:5000)**
 
 1. Se è il primo avvio ed il badge indica `Immagine non presente`, clicca su **`📥 Scarica Immagine vLLM`**.
 2. Seleziona il modello dal menu a tendina e clicca **`▶️ Avvia / Switch Modello`**.
-3. Interroga l'LLM con la **Test Chat integrata** o collega i tuoi client (Open WebUI, Jan, Continue) su **`http://localhost:8000/v1`**.
+3. Interroga l'LLM con la **Test Chat integrata** o collega i tuoi client su **`http://<IP-DEL-TUO-PC>:5000/v1`**.
+
+---
+
+## 🌐 UTILIZZO VIA RETE LOCALE & TAILSCALE
+
+Puoi utilizzare l'API da qualsiasi dispositivo sulla rete locale LAN o da qualsiasi parte del mondo via **Tailscale**:
+
+### Indirizzi di Connessione:
+* **Da Rete LAN Locale:** `http://192.168.X.X:5000/v1`
+* **Da Tailscale (VPN):** `http://100.X.X.X:5000/v1`
+
+### Esempio di chiamata API (con Streaming SSE):
+```bash
+curl http://192.168.X.X:5000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "Qwen2.5-Coder-7B-Instruct-AWQ",
+    "messages": [{"role": "user", "content": "Scrivi una funzione Python per invertire una lista."}],
+    "stream": true
+  }'
+```
 
 ---
 
@@ -78,23 +111,13 @@ podman run --rm -it \
 
 ---
 
-## 🌟 Caratteristiche Principali della Dashboard
-
-* **🎮 Supporto Universale GPU Intel**: Compatibile con Intel Arc B-Series (B580/B570), Arc A-Series (A770/A750/A380), Intel Core Ultra e Data Center GPU.
-* **📊 Telemetria VRAM Live**: Monitoraggio in tempo reale del consumo VRAM della scheda Intel Arc via WebSocket.
-* **🔄 Hot-Switch Modelli**: Sostituisci il modello caricato in memoria con un clic senza riavviare il PC.
-* **💬 Test Chat OpenAI-Compatible**: Prova l'inferenza dell'LLM direttamente nella dashboard.
-* **📜 Live Log Streamer**: Visualizza i log di vLLM (`podman logs -f`) in tempo reale con evidenziazione errori.
-
----
-
 ## 🛠️ Comandi di Gestione Systemd
 
 ```bash
 # Verificare lo stato del servizio
 systemctl --user status vllm-dashboard.service
 
-# Riavviare la dashboard
+# Riavviare la dashboard / server API
 systemctl --user restart vllm-dashboard.service
 
 # Leggere i log di sistema
