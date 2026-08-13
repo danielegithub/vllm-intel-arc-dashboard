@@ -25,7 +25,7 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 class StartModelRequest(BaseModel):
     model_name: str
-    max_model_len: int = 4096
+    max_model_len: int = 2048
     extra_args: str = ""
 
 class ChatRequest(BaseModel):
@@ -93,7 +93,6 @@ async def api_test_chat(req: ChatRequest):
     """
     vllm_url = "http://localhost:8000/v1/chat/completions"
     
-    # Verify container status
     status = get_container_status()
     if not status.get("running"):
         return {
@@ -121,7 +120,6 @@ async def api_test_chat(req: ChatRequest):
     )
 
     try:
-        # Run blocking urllib request in executor
         loop = asyncio.get_running_loop()
         def _do_request():
             with urllib.request.urlopen(request_obj, timeout=60) as resp:
@@ -161,7 +159,7 @@ async def ws_gpu_telemetry(websocket: WebSocket):
             telemetry = get_system_telemetry()
             await websocket.send_json(telemetry)
             await asyncio.sleep(1.0)
-    except WebSocketDisconnect:
+    except (WebSocketDisconnect, asyncio.CancelledError):
         pass
     except Exception:
         pass
@@ -175,11 +173,11 @@ async def ws_container_logs(websocket: WebSocket):
     try:
         async for line in stream_logs():
             await websocket.send_text(line)
-    except WebSocketDisconnect:
+    except (WebSocketDisconnect, asyncio.CancelledError):
         pass
     except Exception:
         pass
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app.main:app", host="0.0.0.0", port=5000, reload=True)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=5000, reload=True, timeout_graceful_shutdown=2)
