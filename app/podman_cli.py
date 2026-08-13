@@ -171,7 +171,7 @@ async def start_container(model_name: str, max_model_len: int = 2048, extra_args
 
     # Official Intel vLLM Docker launch configuration
     cmd = [
-        "podman", "run", "-d", "--rm",
+        "podman", "run", "-d", "--rm", "--replace",
         "--name", CONTAINER_NAME,
         "--net=host",
         "--ipc=host",
@@ -225,16 +225,9 @@ async def start_container(model_name: str, max_model_len: int = 2048, extra_args
 
 async def stop_container() -> Dict:
     """
-    Stops and removes the vllm-intel-arc container.
+    Stops and removes the vllm-intel-arc container immediately.
     """
     try:
-        proc = await asyncio.create_subprocess_exec(
-            "podman", "stop", "-t", "5", CONTAINER_NAME,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-        await proc.communicate()
-
         rm_proc = await asyncio.create_subprocess_exec(
             "podman", "rm", "-f", CONTAINER_NAME,
             stdout=asyncio.subprocess.PIPE,
