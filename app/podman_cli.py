@@ -8,6 +8,7 @@ from typing import List, Dict, AsyncGenerator
 from app.event_broadcaster import EventBroadcaster
 from app.logging_config import logger
 from app.config import get_config
+from app.cache import cache, get_cache, CACHE_KEYS
 
 # Get configuration
 config = get_config()
@@ -22,9 +23,11 @@ CONTAINER_STOP_TIMEOUT = config.podman.container_stop_timeout
 # Thread-safe event broadcaster for real-time system events (image pull progress, etc.)
 log_broadcaster = EventBroadcaster()
 
+@cache(ttl_seconds=30)
 def scan_models(models_dir: str = None) -> List[Dict]:
     """
     Scans ~/my_models directory for model folders and estimates details.
+    Results are cached for 30 seconds to reduce filesystem I/O.
     """
     target_dir = Path(models_dir) if models_dir else DEFAULT_MODELS_DIR
     target_dir = target_dir.expanduser().resolve()
@@ -128,9 +131,12 @@ async def pull_image() -> Dict:
         logger.error(msg)
         return {"success": False, "message": msg}
 
+@cache(ttl_seconds=5)
 def get_container_status() -> Dict:
     """
     Checks the status of the vllm-intel-arc Podman container.
+    Results are cached for 5 seconds to reduce subprocess calls.
+    Call invalidate_container_status_cache() after operations that change state.
     """
     image_downloaded = check_image_exists()
     try:
@@ -270,16 +276,22 @@ async def start_container(model_name: str, max_model_len: int = 2048, extra_args
             return {"success": False, "message": err_msg}
     
     try:
-        return await asyncio.wait_for(_start_container_impl(), timeout=CONTAINER_START_TIMEOUT)
+        result = await asyncio.wait_for(_start_container_impl(), timeout=CONTAINER_START_TIMEOUT)
+        # Invalidate status cache after state change
+        invalidate_status_cache()
+        return result
     except asyncio.TimeoutError:
         msg = f"Container start timeout after {CONTAINER_START_TIMEOUT} seconds"
         await log_broadcaster.broadcast(f"[CONTAINER TIMEOUT] {msg}\n")
         logger.error(msg)
+        # Invalidate status cache after potential state change
+        invalidate_status_cache()
         return {"success": False, "message": msg}
 
 async def stop_container() -> Dict:
     """
     Stops and removes the vllm-intel-arc container immediately.
+    Automatically invalidates status cache after operation.
     """
     try:
         rm_proc = await asyncio.create_subprocess_exec(
@@ -288,9 +300,13 @@ async def stop_container() -> Dict:
             stderr=asyncio.subprocess.PIPE
         )
         await rm_proc.communicate()
-
+        
+        # Invalidate status cache after state change
+        invalidate_status_cache()
         return {"success": True, "message": f"Container {CONTAINER_NAME} arrestato e rimosso."}
     except Exception as e:
+        # Invalidate status cache even on error
+        invalidate_status_cache()
         return {"success": False, "message": f"Errore durante l'arresto: {str(e)}"}
 
 async def stream_logs() -> AsyncGenerator[str, None]:
@@ -414,3 +430,36 @@ async def stream_logs() -> AsyncGenerator[str, None]:
                 await task_container
             except asyncio.CancelledError:
                 pass
+
+
+# ============================================================================
+# CACHE INVALIDATION HELPERS
+# ============================================================================
+
+def invalidate_models_cache() -> None:
+    """
+    Invalidate model metadata cache.
+    Call after operations that modify models directory.
+    """
+    get_cache().invalidate(CACHE_KEYS["models"])
+    logger.debug("Models cache invalidated")
+
+
+def invalidate_status_cache() -> None:
+    """
+    Invalidate container status cache.
+    Call after operations that change container state (start/stop).
+    """
+    get_cache().invalidate(CACHE_KEYS["status"])
+    logger.debug("Container status cache invalidated")
+
+
+def invalidate_all_cache() -> None:
+    """
+    Invalidate all caches.
+    Use after major changes that affect multiple cache keys.
+    """
+    get_cache().invalidate(CACHE_KEYS["models"])
+    get_cache().invalidate(CACHE_KEYS["status"])
+    get_cache().invalidate(CACHE_KEYS["gpu_telemetry"])
+    logger.debug("All caches invalidated")
