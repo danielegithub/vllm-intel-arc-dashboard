@@ -18,36 +18,41 @@ if [ -n "$1" ]; then
     fi
 else
     # Interactive Menu
-    echo "Seleziona uno dei modelli verificati o inserisci un Repo ID personalizzato:"
+    echo "Seleziona uno dei modelli verificati ed ottimizzati per Intel Arc B580 (16GB VRAM):"
     echo ""
-    echo "  1) Qwen2.5-Coder-14B-Instruct-AWQ (Codice - Qwen/Qwen2.5-Coder-14B-Instruct-AWQ)"
-    echo "  2) Qwen2.5-14B-Instruct-AWQ       (Generale - Qwen/Qwen2.5-14B-Instruct-AWQ)"
-    echo "  3) Gemma-2-9B-IT-AWQ              (Google - casperhansen/gemma-2-9b-it-awq)"
-    echo "  4) Qwen2.5-7B-Instruct            (Generale 7B - Qwen/Qwen2.5-7B-Instruct)"
-    echo "  5) Inserisci Repo ID personalizzato Hugging Face"
+    echo "  1) Qwen2.5-Coder-7B-Instruct-AWQ        (Programmazione & Codice)"
+    echo "  2) Qwen2.5-7B-Instruct-AWQ              (Chat Generale & Italiano)"
+    echo "  3) DeepSeek-R1-Distill-Qwen-7B-AWQ      (Ragionamento Avanzato & Logica)"
+    echo "  4) Llama-3-8B-Instruct-AWQ              (Meta Llama 3 8B)"
+    echo "  5) Qwen2.5-3B-Instruct-AWQ              (Ultraveloce 3B)"
+    echo "  6) Inserisci Repo ID personalizzato Hugging Face"
     echo ""
-    read -p "Scelta [1-5]: " CHOICE
+    read -p "Scelta [1-6]: " CHOICE
 
     case "$CHOICE" in
         1)
-            REPO_ID="Qwen/Qwen2.5-Coder-14B-Instruct-AWQ"
-            FOLDER_NAME="Qwen2.5-Coder-14B-AWQ"
+            REPO_ID="Qwen/Qwen2.5-Coder-7B-Instruct-AWQ"
+            FOLDER_NAME="Qwen2.5-Coder-7B-Instruct-AWQ"
             ;;
         2)
-            REPO_ID="Qwen/Qwen2.5-14B-Instruct-AWQ"
-            FOLDER_NAME="Qwen2.5-14B-AWQ"
+            REPO_ID="Qwen/Qwen2.5-7B-Instruct-AWQ"
+            FOLDER_NAME="Qwen2.5-7B-Instruct-AWQ"
             ;;
         3)
-            REPO_ID="casperhansen/gemma-2-9b-it-awq"
-            FOLDER_NAME="Gemma-2-9B-AWQ"
+            REPO_ID="casperhansen/deepseek-r1-distill-qwen-7b-awq"
+            FOLDER_NAME="DeepSeek-R1-Distill-Qwen-7B-AWQ"
             ;;
         4)
-            REPO_ID="Qwen/Qwen2.5-7B-Instruct"
-            FOLDER_NAME="Qwen2.5-7B"
+            REPO_ID="casperhansen/llama-3-8b-instruct-awq"
+            FOLDER_NAME="Llama-3-8B-Instruct-AWQ"
             ;;
         5)
+            REPO_ID="Qwen/Qwen2.5-3B-Instruct-AWQ"
+            FOLDER_NAME="Qwen2.5-3B-Instruct-AWQ"
+            ;;
+        6)
             echo ""
-            read -p "Inserisci il repo ID di Hugging Face (es. Qwen/Qwen2.5-7B-Instruct): " REPO_ID
+            read -p "Inserisci il repo ID di Hugging Face (es. Qwen/Qwen2.5-7B-Instruct-AWQ): " REPO_ID
             if [ -z "$REPO_ID" ]; then
                 echo "❌ Repo ID non valido. Operazione annullata."
                 exit 1

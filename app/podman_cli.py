@@ -183,9 +183,8 @@ async def start_container(model_name: str, max_model_len: int = 2048, extra_args
         IMAGE_NAME,
         "vllm", "serve", "/workspace/model",
         "--dtype", "float16",
-        "--enforce-eager",
         "--port", "8000",
-        "--gpu-memory-utilization", "0.75",
+        "--gpu-memory-utilization", "0.70",
         "--max-model-len", str(max_model_len)
     ]
 

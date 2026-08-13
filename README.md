@@ -1,8 +1,8 @@
 # ⚡ vLLM Intel Arc Dashboard (`vllm-intel-arc-dashboard`)
 
-**vLLM Intel Arc Dashboard** è un'applicazione Web reattiva e completamente automatizzata per eseguire e gestire Modelli Linguistici (LLM) tramite **vLLM** accelerato da **GPU Intel** (discrete ed integrate) su Linux.
+**vLLM Intel Arc Dashboard** è un'applicazione Web reattiva e completamente automatizzata per eseguire e gestire Modelli Linguistici (LLM) tramite **vLLM** accelerato da **GPU Intel Arc** (B-Series, A-Series, Data Center e integrate) su Linux.
 
-L'applicazione trasforma il tuo computer in un server di inferenza locale compatibile con le **API OpenAI**, fornendo una Dashboard Web ed un servizio di background **Systemd** che si avvia automaticamente all'accensione del PC.
+L'applicazione trasforma il tuo computer in un server di inferenza locale ad alte prestazioni compatibile con le **API OpenAI**, fornendo una Dashboard Web ed un servizio di background **Systemd** che si avvia automaticamente all'accensione del PC.
 
 ---
 
@@ -14,7 +14,7 @@ Lo script compie automaticamente **tutti** i passaggi necessari:
 1. **Rileva ed installa Podman**: Se Podman non è installato, lo scarica ed installa automaticamente tramite il gestore di pacchetti di sistema (`apt`, `dnf`, `pacman`).
 2. **Configura i permessi hardware GPU Intel**: Aggiunge l'utente ai gruppi `render` e `video` per garantire l'accesso diretto alla scheda video.
 3. **Prepara l'ambiente Python & Autostart Systemd**: Configura il virtual environment e registra il servizio `vllm-dashboard.service` per far partire l'app in background ad ogni avvio del PC.
-4. **Scarica i Modelli LLM da Hugging Face**: Offre un menu interattivo per scaricare direttamente i modelli pre-testati (es. `Qwen2.5-Coder-14B-AWQ`, `Qwen2.5-14B-AWQ`, `Gemma-2-9B-AWQ`) nella cartella `~/my_models`.
+4. **Scarica i Modelli LLM da Hugging Face**: Offre un menu interattivo per scaricare direttamente i modelli pre-testati ed ottimizzati per 16GB VRAM (es. `Qwen2.5-Coder-7B-Instruct-AWQ`, `Qwen2.5-7B-Instruct-AWQ`, `DeepSeek-R1-Distill-Qwen-7B-AWQ`) nella cartella `~/my_models`.
 
 ---
 
@@ -40,16 +40,40 @@ Vai a: 👉 **[http://localhost:5000](http://localhost:5000)**
 
 ---
 
-## 📥 SCARICARE ALTRI MODELLI DA HUGGING FACE
+## 📥 MODELLI CONSIGLIATI E COMANDI DI DOWNLOAD
 
-Puoi anche eseguire lo script in qualsiasi momento per scaricare nuovi modelli:
+I seguenti modelli AWQ sono stati testati e verificati per funzionare in modo ottimale sulla scheda video **Intel Arc B580 (16GB VRAM)**:
 
+### 1️⃣ Qwen2.5-Coder-7B-Instruct-AWQ (Programmazione e Codice)
 ```bash
-# Esecuzione interattiva
-./download_model.sh
+podman run --rm -it \
+  -v ~/my_models:/download \
+  docker.io/library/python:3.11-slim \
+  bash -c "pip install --no-cache-dir huggingface_hub && hf download Qwen/Qwen2.5-Coder-7B-Instruct-AWQ --local-dir /download/Qwen2.5-Coder-7B-Instruct-AWQ"
+```
 
-# Oppure da linea di comando:
-./download_model.sh Qwen/Qwen2.5-14B-Instruct-AWQ Qwen2.5-14B-AWQ
+### 2️⃣ Qwen2.5-7B-Instruct-AWQ (Chat Generale, Italiano e Scrittura)
+```bash
+podman run --rm -it \
+  -v ~/my_models:/download \
+  docker.io/library/python:3.11-slim \
+  bash -c "pip install --no-cache-dir huggingface_hub && hf download Qwen/Qwen2.5-7B-Instruct-AWQ --local-dir /download/Qwen2.5-7B-Instruct-AWQ"
+```
+
+### 3️⃣ DeepSeek-R1-Distill-Qwen-7B-AWQ (Reasoning Avanzato e Logica)
+```bash
+podman run --rm -it \
+  -v ~/my_models:/download \
+  docker.io/library/python:3.11-slim \
+  bash -c "pip install --no-cache-dir huggingface_hub && hf download casperhansen/deepseek-r1-distill-qwen-7b-awq --local-dir /download/DeepSeek-R1-Distill-Qwen-7B-AWQ"
+```
+
+### 4️⃣ Llama-3-8B-Instruct-AWQ (Meta Llama 3)
+```bash
+podman run --rm -it \
+  -v ~/my_models:/download \
+  docker.io/library/python:3.11-slim \
+  bash -c "pip install --no-cache-dir huggingface_hub && hf download casperhansen/llama-3-8b-instruct-awq --local-dir /download/Llama-3-8B-Instruct-AWQ"
 ```
 
 ---
