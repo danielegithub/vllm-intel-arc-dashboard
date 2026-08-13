@@ -161,7 +161,7 @@ def get_container_status() -> Dict:
 
 async def start_container(model_name: str, max_model_len: int = 4096, extra_args: str = "") -> Dict:
     """
-    Stops existing container and runs docker.io/intel/vllm:0.17.0-xpu with hardware flags.
+    Stops existing container and runs docker.io/intel/vllm:0.17.0-xpu with verified Intel Arc Level Zero flags.
     """
     model_path = DEFAULT_MODELS_DIR / model_name
     if not model_path.exists():
@@ -169,14 +169,16 @@ async def start_container(model_name: str, max_model_len: int = 4096, extra_args
 
     await stop_container()
 
-    # Correct hardware invocation for Intel Arc GPU via /dev/dri
     cmd = [
         "podman", "run", "-d", "--rm",
         "--name", CONTAINER_NAME,
+        "--ipc=host",
         "--device", "/dev/dri:/dev/dri",
         "--net=host",
+        "-e", "ONEAPI_DEVICE_SELECTOR=level_zero:0",
         "-v", f"{model_path.resolve()}:/workspace/model:ro",
         IMAGE_NAME,
+        "python3", "-m", "vllm.entrypoints.openai.api_server",
         "--model", "/workspace/model",
         "--max-model-len", str(max_model_len),
         "--host", "0.0.0.0",
