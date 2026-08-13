@@ -159,9 +159,9 @@ def get_container_status() -> Dict:
         "api_url": "http://localhost:8000/v1"
     }
 
-async def start_container(model_name: str, max_model_len: int = 4096, extra_args: str = "") -> Dict:
+async def start_container(model_name: str, max_model_len: int = 2048, extra_args: str = "") -> Dict:
     """
-    Stops existing container and runs docker.io/intel/vllm:0.17.0-xpu with verified Intel Arc Level Zero flags.
+    Stops existing container and runs docker.io/intel/vllm:0.17.0-xpu using official Intel Docker parameters.
     """
     model_path = DEFAULT_MODELS_DIR / model_name
     if not model_path.exists():
@@ -169,20 +169,24 @@ async def start_container(model_name: str, max_model_len: int = 4096, extra_args
 
     await stop_container()
 
+    # Official Intel vLLM Docker launch configuration
     cmd = [
         "podman", "run", "-d", "--rm",
         "--name", CONTAINER_NAME,
-        "--ipc=host",
-        "--device", "/dev/dri:/dev/dri",
         "--net=host",
-        "-e", "ONEAPI_DEVICE_SELECTOR=level_zero:0",
+        "--ipc=host",
+        "--privileged",
+        "-v", "/dev/dri/by-path:/dev/dri/by-path",
+        "--device", "/dev/dri:/dev/dri",
+        "-e", "VLLM_WORKER_MULTIPROC_METHOD=spawn",
         "-v", f"{model_path.resolve()}:/workspace/model:ro",
         IMAGE_NAME,
-        "python3", "-m", "vllm.entrypoints.openai.api_server",
-        "--model", "/workspace/model",
-        "--max-model-len", str(max_model_len),
-        "--host", "0.0.0.0",
-        "--port", "8000"
+        "vllm", "serve", "/workspace/model",
+        "--dtype", "float16",
+        "--enforce-eager",
+        "--port", "8000",
+        "--gpu-memory-utilization", "0.75",
+        "--max-model-len", str(max_model_len)
     ]
 
     if extra_args and extra_args.strip():
