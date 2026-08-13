@@ -191,25 +191,25 @@
                     </div>
                 </div>
 
-                <!-- Expanded Control Actions -->
-                <div class="space-y-2 pt-2">
+                <!-- Dynamic Control Actions (State-Driven) -->
+                <div class="space-y-3 pt-2">
                     <div class="flex flex-wrap gap-3">
-                        <button id="btn-start" onclick="startOrSwitchModel()" class="flex-1 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-semibold text-sm py-2.5 px-4 rounded-xl shadow-lg shadow-cyan-600/20 transition active:scale-[0.98] flex items-center justify-center space-x-2">
-                            <span>▶️ Avvia / Switch Modello</span>
+                        <button id="btn-start" onclick="startOrSwitchModel()" class="flex-1 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold text-sm py-2.5 px-4 rounded-xl shadow-lg shadow-cyan-600/20 transition active:scale-[0.98] flex items-center justify-center space-x-2">
+                            <span id="btn-start-label">▶️ Avvia Modello</span>
                         </button>
 
-                        <button id="btn-stop" onclick="stopContainer()" class="bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/30 text-rose-300 font-semibold text-sm py-2.5 px-4 rounded-xl transition active:scale-[0.98] flex items-center justify-center space-x-1">
+                        <button id="btn-stop" onclick="stopContainer()" disabled class="bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/30 disabled:opacity-40 disabled:cursor-not-allowed text-rose-300 font-semibold text-sm py-2.5 px-4 rounded-xl transition active:scale-[0.98] flex items-center justify-center space-x-1">
                             <span>⏹️ Ferma Container</span>
                         </button>
                     </div>
 
                     <!-- Setup & Removal Utilities -->
-                    <div class="flex flex-wrap gap-2 pt-1 border-t border-slate-800/80">
-                        <button id="btn-pull-img" onclick="pullImage()" class="text-xs bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 py-1.5 px-3 rounded-lg transition flex items-center space-x-1">
-                            <span>📥 Scarica Immagine vLLM</span>
+                    <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800/80 text-xs">
+                        <button id="btn-pull-img" onclick="pullImage()" class="bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 border border-cyan-500/30 py-1.5 px-3 rounded-lg transition flex items-center space-x-1 font-medium">
+                            <span id="btn-pull-label">📥 Scarica Immagine vLLM</span>
                         </button>
-                        <button id="btn-rm-container" onclick="removeContainer()" class="text-xs bg-slate-800 hover:bg-slate-700 text-rose-300 border border-slate-700 py-1.5 px-3 rounded-lg transition flex items-center space-x-1">
-                            <span>🗑️ Rimuovi Container Podman</span>
+                        <button id="btn-rm-container" onclick="removeContainer()" disabled class="bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed text-rose-300 border border-slate-700 py-1.5 px-3 rounded-lg transition flex items-center space-x-1">
+                            <span>🗑️ Rimuovi Container</span>
                         </button>
                     </div>
                 </div>
@@ -230,7 +230,7 @@
 
             <!-- Chat Output Box -->
             <div id="chat-window" class="bg-slate-950 border border-slate-800 rounded-xl p-4 min-h-[160px] max-h-[320px] overflow-y-auto space-y-3 font-sans text-sm">
-                <div class="text-slate-500 italic text-xs text-center py-4">
+                <div id="chat-placeholder-msg" class="text-slate-500 italic text-xs text-center py-4">
                     Avvia un modello nel container ed inserisci un prompt per verificare l'inferenza live su Intel Arc B580.
                 </div>
             </div>
@@ -238,8 +238,8 @@
             <!-- Prompt Input Bar & Settings -->
             <div class="space-y-3">
                 <div class="flex gap-3">
-                    <input type="text" id="chat-prompt" placeholder="Scrivi un messaggio di test (es. Spiegami cos'è la GPU Intel Arc B580)..." onkeydown="if(event.key==='Enter') sendChatPrompt()" class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 font-sans">
-                    <button id="btn-send-chat" onclick="sendChatPrompt()" class="bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-sm px-5 py-2.5 rounded-xl transition active:scale-[0.98] flex items-center justify-center space-x-1.5 shadow-lg shadow-cyan-600/20">
+                    <input type="text" id="chat-prompt" disabled placeholder="Scarica l'immagine vLLM ed avvia un modello per iniziare a chattare..." onkeydown="if(event.key==='Enter') sendChatPrompt()" class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50 font-sans">
+                    <button id="btn-send-chat" disabled onclick="sendChatPrompt()" class="bg-cyan-600 hover:bg-cyan-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold text-sm px-5 py-2.5 rounded-xl transition active:scale-[0.98] flex items-center justify-center space-x-1.5 shadow-lg shadow-cyan-600/20">
                         <span>💬 Invia</span>
                     </button>
                 </div>
@@ -256,7 +256,7 @@
                         </label>
                     </div>
                     <div id="chat-stats-badge" class="font-mono text-slate-500">
-                        Pronto per l'inferenza
+                        Inattivo (Richiede container vLLM)
                     </div>
                 </div>
             </div>
@@ -300,12 +300,13 @@
         let rawLogLines = [];
         let gpuWs = null;
         let logWs = null;
+        let lastState = null;
 
         document.addEventListener("DOMContentLoaded", () => {
             fetchModels();
             checkStatus();
             initWebSockets();
-            setInterval(checkStatus, 4000);
+            setInterval(checkStatus, 3000);
         });
 
         function copyApiUrl() {
@@ -360,31 +361,78 @@
             try {
                 const res = await fetch("/api/status");
                 const data = await res.json();
+                lastState = data;
                 
                 const dot = document.getElementById("status-dot");
                 const text = document.getElementById("status-text");
                 const imgBadge = document.getElementById("image-status-badge");
 
+                const btnStart = document.getElementById("btn-start");
+                const btnStartLabel = document.getElementById("btn-start-label");
+                const btnStop = document.getElementById("btn-stop");
+                const btnRm = document.getElementById("btn-rm-container");
+                const btnPull = document.getElementById("btn-pull-img");
+                const btnPullLabel = document.getElementById("btn-pull-label");
+                
+                const chatPrompt = document.getElementById("chat-prompt");
+                const btnSendChat = document.getElementById("btn-send-chat");
+                const chatStats = document.getElementById("chat-stats-badge");
+
+                // Update Image Badge & Pull Button
                 if (data.image_downloaded) {
                     imgBadge.textContent = "Immagine Podman OK";
                     imgBadge.className = "text-xs px-2 py-0.5 rounded font-mono bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
+                    btnPullLabel.textContent = "📥 Riscarica Immagine vLLM";
                 } else {
                     imgBadge.textContent = "Immagine non presente (Richiede Pull)";
                     imgBadge.className = "text-xs px-2 py-0.5 rounded font-mono bg-amber-500/20 text-amber-400 border border-amber-500/30";
+                    btnPullLabel.textContent = "📥 Scarica Immagine vLLM (Richiesto)";
                 }
 
-                if (data.running) {
+                // State-Driven Button Controls
+                if (!data.image_downloaded) {
+                    // Case 1: Image not present
+                    btnStart.disabled = true;
+                    btnStartLabel.textContent = "▶️ Scarica prima l'Immagine";
+                    btnStop.disabled = true;
+                    btnRm.disabled = true;
+                    
+                    chatPrompt.disabled = true;
+                    chatPrompt.placeholder = "Scarica l'immagine vLLM ed avvia un modello per abilitare la chat...";
+                    btnSendChat.disabled = true;
+                    chatStats.textContent = "Inattivo (Immagine vLLM mancante)";
+
+                } else if (data.running) {
+                    // Case 2: Container IS RUNNING
                     dot.className = "w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-md shadow-emerald-400/50 animate-pulse";
                     text.textContent = `Attivo (${data.model_name || 'vLLM'})`;
                     text.className = "text-xs font-semibold text-emerald-300";
-                } else if (data.exists) {
-                    dot.className = "w-2.5 h-2.5 rounded-full bg-amber-400";
-                    text.textContent = "Inattivo (Container arrestato)";
-                    text.className = "text-xs font-semibold text-amber-300";
+
+                    btnStart.disabled = false;
+                    btnStartLabel.textContent = "🔄 Switch Modello";
+                    btnStop.disabled = false;
+                    btnRm.disabled = false;
+
+                    chatPrompt.disabled = false;
+                    chatPrompt.placeholder = "Fai una domanda all'LLM (es. Spiegami cos'è la GPU Intel Arc B580)...";
+                    btnSendChat.disabled = false;
+                    chatStats.textContent = `Pronto (Modello: ${data.model_name || 'vLLM'})`;
+
                 } else {
+                    // Case 3: Image downloaded, but Container STOPPED / NOT CREATED
                     dot.className = "w-2.5 h-2.5 rounded-full bg-slate-500";
-                    text.textContent = "Nessun container in esecuzione";
+                    text.textContent = data.exists ? "Inattivo (Container arrestato)" : "Nessun container in esecuzione";
                     text.className = "text-xs font-semibold text-slate-400";
+
+                    btnStart.disabled = false;
+                    btnStartLabel.textContent = "▶️ Avvia Modello";
+                    btnStop.disabled = true; // Nothing to stop
+                    btnRm.disabled = !data.exists;
+
+                    chatPrompt.disabled = true;
+                    chatPrompt.placeholder = "Avvia un modello nel container per abilitare la chat...";
+                    btnSendChat.disabled = true;
+                    chatStats.textContent = "Inattivo (Seleziona un modello ed avvialo)";
                 }
             } catch (err) {
                 console.error("Errore verifica stato:", err);
@@ -452,7 +500,6 @@
                 alert("Errore di connessione API: " + err);
             } finally {
                 btn.disabled = false;
-                btn.innerHTML = `<span>▶️ Avvia / Switch Modello</span>`;
                 checkStatus();
             }
         }
@@ -489,7 +536,6 @@
             }
         }
 
-        // LLM Test Chat Logic
         async function sendChatPrompt() {
             const input = document.getElementById("chat-prompt");
             const promptText = input.value.trim();
@@ -501,12 +547,9 @@
             const temp = parseFloat(document.getElementById("chat-temp").value) || 0.7;
             const maxTokens = parseInt(document.getElementById("chat-tokens").value) || 512;
 
-            // Remove placeholder if present
-            if (chatWin.children.length === 1 && chatWin.children[0].classList.contains("italic")) {
-                chatWin.innerHTML = "";
-            }
+            const placeholder = document.getElementById("chat-placeholder-msg");
+            if (placeholder) placeholder.remove();
 
-            // Append User Message
             const userMsgEl = document.createElement("div");
             userMsgEl.className = "flex justify-end";
             userMsgEl.innerHTML = `
@@ -517,7 +560,6 @@
             `;
             chatWin.appendChild(userMsgEl);
 
-            // Append Placeholder Assistant Message
             const assistMsgEl = document.createElement("div");
             assistMsgEl.className = "flex justify-start";
             assistMsgEl.innerHTML = `
@@ -578,7 +620,7 @@
         function clearChatHistory() {
             const chatWin = document.getElementById("chat-window");
             chatWin.innerHTML = `
-                <div class="text-slate-500 italic text-xs text-center py-4">
+                <div id="chat-placeholder-msg" class="text-slate-500 italic text-xs text-center py-4">
                     Chat pulita. Inserisci un nuovo prompt per verificare l'inferenza.
                 </div>
             `;
