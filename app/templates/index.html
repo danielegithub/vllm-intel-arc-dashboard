@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="it" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vLLM Intel Arc B580 Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        intel: {
+                            50: '#edf7ff',
+                            100: '#d7edff',
+                            400: '#38bdf8',
+                            500: '#0068b5',
+                            600: '#005299',
+                            700: '#003f7a',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+        .glass-card {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans min-h-screen flex flex-col">
+
+    <!-- Header / Navbar -->
+    <header class="border-b border-slate-800 bg-slate-900/80 sticky top-0 z-50 backdrop-blur">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20 font-bold text-white text-lg">
+                    ⚡
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+                        vLLM Manager <span class="bg-cyan-500/10 text-cyan-400 text-xs px-2 py-0.5 rounded-md border border-cyan-500/20 font-mono font-medium">Intel Arc B580</span>
+                    </h1>
+                    <p class="text-xs text-slate-400">Podman Container Lifecycle, Telemetry & Test Chat</p>
+                </div>
+            </div>
+
+            <!-- Status Badges -->
+            <div class="flex items-center space-x-4">
+                <div id="container-status-badge" class="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-slate-800 border border-slate-700">
+                    <span class="w-2.5 h-2.5 rounded-full bg-slate-500 animate-pulse" id="status-dot"></span>
+                    <span class="text-xs font-semibold text-slate-300" id="status-text">Verifica stato...</span>
+                </div>
+
+                <div class="hidden md:flex items-center space-x-2 bg-slate-800/80 px-3 py-1.5 rounded-lg border border-slate-700 text-xs font-mono text-slate-300">
+                    <span class="text-slate-500">API:</span>
+                    <span class="text-cyan-400 font-medium">http://localhost:8000/v1</span>
+                    <button onclick="copyApiUrl()" title="Copia URL" class="hover:text-white transition">📋</button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Grid -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-grow space-y-6">
+
+        <!-- Top Row: GPU Telemetry & Podman Controls -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+            <!-- Intel GPU Telemetry Widget (5 cols) -->
+            <div class="lg:col-span-5 glass-card rounded-2xl p-5 space-y-5">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <div class="flex items-center space-x-2">
+                        <span class="text-cyan-400 text-lg">🎮</span>
+                        <h2 class="font-semibold text-slate-200 text-sm tracking-wide">Intel Arc GPU Telemetry</h2>
+                    </div>
+                    <span id="gpu-name-badge" class="text-xs font-mono text-slate-400 bg-slate-800 px-2 py-0.5 rounded">Xe Driver</span>
+                </div>
+
+                <!-- VRAM Radial Gauge -->
+                <div class="bg-slate-900/90 rounded-xl p-4 border border-slate-800/80">
+                    <div class="flex justify-between items-end mb-2">
+                        <div>
+                            <span class="text-xs uppercase tracking-wider text-slate-400 font-medium">VRAM Allocata</span>
+                            <div class="text-2xl font-bold text-white font-mono mt-0.5">
+                                <span id="vram-used-gb">0.00</span> <span class="text-sm font-normal text-slate-400">/ <span id="vram-total-gb">16.0</span> GB</span>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <span id="vram-percent-badge" class="text-lg font-bold text-cyan-400 font-mono">0.0%</span>
+                        </div>
+                    </div>
+                    
+                    <div class="w-full bg-slate-800 h-3 rounded-full overflow-hidden p-0.5 border border-slate-700">
+                        <div id="vram-progress-bar" class="bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-500 h-full rounded-full transition-all duration-500 w-0 shadow-lg shadow-cyan-500/50"></div>
+                    </div>
+
+                    <div class="mt-3 flex justify-between text-xs text-slate-400 font-mono">
+                        <span>Disponibile: <strong class="text-white" id="vram-free-mb">16384</strong> MB</span>
+                        <span>Proc. Xe: <strong class="text-white" id="xe-fds-count">0</strong></span>
+                    </div>
+                </div>
+
+                <!-- System Resources -->
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="bg-slate-900/60 rounded-xl p-3.5 border border-slate-800/80">
+                        <div class="flex justify-between text-xs text-slate-400 mb-1">
+                            <span>Host CPU</span>
+                            <span id="cpu-percent" class="font-mono text-slate-200">0%</span>
+                        </div>
+                        <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                            <div id="cpu-bar" class="bg-emerald-500 h-full rounded-full transition-all duration-300 w-0"></div>
+                        </div>
+                    </div>
+
+                    <div class="bg-slate-900/60 rounded-xl p-3.5 border border-slate-800/80">
+                        <div class="flex justify-between text-xs text-slate-400 mb-1">
+                            <span>Host RAM</span>
+                            <span id="ram-used" class="font-mono text-slate-200">0 GB</span>
+                        </div>
+                        <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                            <div id="ram-bar" class="bg-indigo-500 h-full rounded-full transition-all duration-300 w-0"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Model Switcher & Container Lifecycle (7 cols) -->
+            <div class="lg:col-span-7 glass-card rounded-2xl p-5 space-y-4 flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-cyan-400 text-lg">🤖</span>
+                            <h2 class="font-semibold text-slate-200 text-sm tracking-wide">Gestione Modelli & Podman</h2>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <span id="image-status-badge" class="text-xs px-2 py-0.5 rounded font-mono bg-slate-800 text-slate-400">Verifica Immagine...</span>
+                        </div>
+                    </div>
+
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-300 mb-1.5">Seleziona Modello da Caricare (~/my_models)</label>
+                            <select id="model-select" onchange="onModelSelected()" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 font-mono">
+                                <option value="" disabled selected>Caricamento modelli in corso...</option>
+                            </select>
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-medium text-slate-400 mb-1">Max Model Length</label>
+                                <input type="number" id="max-model-len" value="4096" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-200 font-mono focus:ring-2 focus:ring-cyan-500 focus:outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-400 mb-1">Extra Podman / vLLM Flags</label>
+                                <input type="text" id="extra-flags" placeholder="es. --dtype float16" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-200 font-mono focus:ring-2 focus:ring-cyan-500 focus:outline-none">
+                            </div>
+                        </div>
+
+                        <div id="model-info-box" class="bg-slate-900/70 rounded-xl p-3 border border-slate-800 text-xs flex justify-between items-center text-slate-300">
+                            <div>
+                                <span class="text-slate-500">Dimensione:</span> <strong id="model-size-gb" class="text-slate-200">--</strong> GB
+                            </div>
+                            <div>
+                                <span class="text-slate-500">Config:</span> <span id="model-config-badge" class="px-2 py-0.5 rounded bg-slate-800 text-slate-400">Verifica...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Expanded Control Actions -->
+                <div class="space-y-2 pt-2">
+                    <div class="flex flex-wrap gap-3">
+                        <button id="btn-start" onclick="startOrSwitchModel()" class="flex-1 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-semibold text-sm py-2.5 px-4 rounded-xl shadow-lg shadow-cyan-600/20 transition active:scale-[0.98] flex items-center justify-center space-x-2">
+                            <span>▶️ Avvia / Switch Modello</span>
+                        </button>
+
+                        <button id="btn-stop" onclick="stopContainer()" class="bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/30 text-rose-300 font-semibold text-sm py-2.5 px-4 rounded-xl transition active:scale-[0.98] flex items-center justify-center space-x-1">
+                            <span>⏹️ Ferma Container</span>
+                        </button>
+                    </div>
+
+                    <!-- Setup & Removal Utilities -->
+                    <div class="flex flex-wrap gap-2 pt-1 border-t border-slate-800/80">
+                        <button id="btn-pull-img" onclick="pullImage()" class="text-xs bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 py-1.5 px-3 rounded-lg transition flex items-center space-x-1">
+                            <span>📥 Scarica Immagine vLLM</span>
+                        </button>
+                        <button id="btn-rm-container" onclick="removeContainer()" class="text-xs bg-slate-800 hover:bg-slate-700 text-rose-300 border border-slate-700 py-1.5 px-3 rounded-lg transition flex items-center space-x-1">
+                            <span>🗑️ Rimuovi Container Podman</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Middle Row: Interactive LLM Test Chat -->
+        <div class="glass-card rounded-2xl p-5 space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div class="flex items-center space-x-2">
+                    <span class="text-cyan-400 text-lg">💬</span>
+                    <h2 class="font-semibold text-slate-200 text-sm tracking-wide">Test Chat LLM (OpenAI API /v1/chat/completions)</h2>
+                </div>
+                <button onclick="clearChatHistory()" class="text-xs text-slate-400 hover:text-slate-200 bg-slate-800 px-2.5 py-1 rounded border border-slate-700 transition">
+                    🧹 Pulisci Chat
+                </button>
+            </div>
+
+            <!-- Chat Output Box -->
+            <div id="chat-window" class="bg-slate-950 border border-slate-800 rounded-xl p-4 min-h-[160px] max-h-[320px] overflow-y-auto space-y-3 font-sans text-sm">
+                <div class="text-slate-500 italic text-xs text-center py-4">
+                    Avvia un modello nel container ed inserisci un prompt per verificare l'inferenza live su Intel Arc B580.
+                </div>
+            </div>
+
+            <!-- Prompt Input Bar & Settings -->
+            <div class="space-y-3">
+                <div class="flex gap-3">
+                    <input type="text" id="chat-prompt" placeholder="Scrivi un messaggio di test (es. Spiegami cos'è la GPU Intel Arc B580)..." onkeydown="if(event.key==='Enter') sendChatPrompt()" class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 font-sans">
+                    <button id="btn-send-chat" onclick="sendChatPrompt()" class="bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-sm px-5 py-2.5 rounded-xl transition active:scale-[0.98] flex items-center justify-center space-x-1.5 shadow-lg shadow-cyan-600/20">
+                        <span>💬 Invia</span>
+                    </button>
+                </div>
+
+                <div class="flex flex-wrap items-center justify-between gap-4 text-xs text-slate-400 bg-slate-900/60 p-2.5 rounded-xl border border-slate-800">
+                    <div class="flex items-center space-x-3">
+                        <label class="flex items-center space-x-2">
+                            <span>Temperatura:</span>
+                            <input type="number" id="chat-temp" min="0.0" max="2.0" step="0.1" value="0.7" class="w-16 bg-slate-800 border border-slate-700 rounded px-2 py-0.5 text-slate-200 font-mono text-xs">
+                        </label>
+                        <label class="flex items-center space-x-2">
+                            <span>Max Tokens:</span>
+                            <input type="number" id="chat-tokens" min="16" max="2048" step="64" value="512" class="w-20 bg-slate-800 border border-slate-700 rounded px-2 py-0.5 text-slate-200 font-mono text-xs">
+                        </label>
+                    </div>
+                    <div id="chat-stats-badge" class="font-mono text-slate-500">
+                        Pronto per l'inferenza
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Row: Live Podman Terminal Logs -->
+        <div class="glass-card rounded-2xl p-5 space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                <div class="flex items-center space-x-2">
+                    <span class="text-emerald-400 font-mono text-lg">&gt;_</span>
+                    <h2 class="font-semibold text-slate-200 text-sm tracking-wide">Live Container Logs (<span class="font-mono text-cyan-400">podman logs -f vllm-intel-arc</span>)</h2>
+                </div>
+
+                <div class="flex items-center space-x-3 text-xs">
+                    <input type="text" id="log-filter" oninput="filterLogs()" placeholder="Filtra log..." class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-slate-200 font-mono focus:outline-none focus:border-cyan-500 w-36 sm:w-48">
+                    
+                    <label class="flex items-center space-x-1.5 text-slate-400 cursor-pointer select-none">
+                        <input type="checkbox" id="autoscroll-chk" checked class="rounded border-slate-700 bg-slate-900 text-cyan-500 focus:ring-0">
+                        <span>Auto-scroll</span>
+                    </label>
+
+                    <button onclick="clearLogs()" class="text-slate-400 hover:text-slate-200 bg-slate-800 hover:bg-slate-700 px-2.5 py-1 rounded border border-slate-700 transition">
+                        🗑️ Pulisci
+                    </button>
+                </div>
+            </div>
+
+            <div id="terminal-window" class="bg-slate-950 border border-slate-800 rounded-xl p-4 font-mono text-xs text-slate-300 h-80 overflow-y-auto space-y-1 select-text">
+                <div class="text-slate-500 italic">[SISTEMA] Connessione al live log stream di Podman in corso...</div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="border-t border-slate-800 py-3 bg-slate-900/40 text-center text-xs text-slate-500">
+        vLLM Podman Intel Arc Manager &bull; Linux Mint &bull; WebSocket Live Telemetry
+    </footer>
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        let availableModels = [];
+        let rawLogLines = [];
+        let gpuWs = null;
+        let logWs = null;
+
+        document.addEventListener("DOMContentLoaded", () => {
+            fetchModels();
+            checkStatus();
+            initWebSockets();
+            setInterval(checkStatus, 4000);
+        });
+
+        function copyApiUrl() {
+            navigator.clipboard.writeText("http://localhost:8000/v1");
+            alert("URL API copiato negli appunti: http://localhost:8000/v1");
+        }
+
+        async function fetchModels() {
+            try {
+                const res = await fetch("/api/models");
+                availableModels = await res.json();
+                const select = document.getElementById("model-select");
+                select.innerHTML = "";
+
+                if (availableModels.length === 0) {
+                    select.innerHTML = `<option value="">Nessun modello trovato in ~/my_models</option>`;
+                    return;
+                }
+
+                availableModels.forEach((m) => {
+                    const opt = document.createElement("option");
+                    opt.value = m.name;
+                    opt.textContent = `${m.name} (${m.size_gb} GB)`;
+                    select.appendChild(opt);
+                });
+
+                onModelSelected();
+            } catch (err) {
+                console.error("Errore caricamento modelli:", err);
+            }
+        }
+
+        function onModelSelected() {
+            const select = document.getElementById("model-select");
+            const selectedName = select.value;
+            const model = availableModels.find(m => m.name === selectedName);
+
+            if (model) {
+                document.getElementById("model-size-gb").textContent = model.size_gb;
+                const badge = document.getElementById("model-config-badge");
+                if (model.has_config) {
+                    badge.textContent = "OK (config.json)";
+                    badge.className = "px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
+                } else {
+                    badge.textContent = "Warning (No config)";
+                    badge.className = "px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30";
+                }
+            }
+        }
+
+        async function checkStatus() {
+            try {
+                const res = await fetch("/api/status");
+                const data = await res.json();
+                
+                const dot = document.getElementById("status-dot");
+                const text = document.getElementById("status-text");
+                const imgBadge = document.getElementById("image-status-badge");
+
+                if (data.image_downloaded) {
+                    imgBadge.textContent = "Immagine Podman OK";
+                    imgBadge.className = "text-xs px-2 py-0.5 rounded font-mono bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
+                } else {
+                    imgBadge.textContent = "Immagine non presente (Richiede Pull)";
+                    imgBadge.className = "text-xs px-2 py-0.5 rounded font-mono bg-amber-500/20 text-amber-400 border border-amber-500/30";
+                }
+
+                if (data.running) {
+                    dot.className = "w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-md shadow-emerald-400/50 animate-pulse";
+                    text.textContent = `Attivo (${data.model_name || 'vLLM'})`;
+                    text.className = "text-xs font-semibold text-emerald-300";
+                } else if (data.exists) {
+                    dot.className = "w-2.5 h-2.5 rounded-full bg-amber-400";
+                    text.textContent = "Inattivo (Container arrestato)";
+                    text.className = "text-xs font-semibold text-amber-300";
+                } else {
+                    dot.className = "w-2.5 h-2.5 rounded-full bg-slate-500";
+                    text.textContent = "Nessun container in esecuzione";
+                    text.className = "text-xs font-semibold text-slate-400";
+                }
+            } catch (err) {
+                console.error("Errore verifica stato:", err);
+            }
+        }
+
+        async function pullImage() {
+            const btn = document.getElementById("btn-pull-img");
+            btn.disabled = true;
+            btn.innerHTML = `<span>⏳ Download in corso...</span>`;
+            appendSystemLog("[PODMAN] Avvio download dell'immagine docker.io/intel/vllm:0.17.0-xpu...");
+
+            try {
+                const res = await fetch("/api/image/pull", { method: "POST" });
+                const data = await res.json();
+                if (data.success) {
+                    appendSystemLog(`[PODMAN SUCCESS] ${data.message}`);
+                    alert(data.message);
+                } else {
+                    appendSystemLog(`[PODMAN ERROR] ${data.message}`);
+                    alert("Errore pull: " + data.message);
+                }
+            } catch (err) {
+                alert("Errore API pull: " + err);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = `<span>📥 Scarica Immagine vLLM</span>`;
+                checkStatus();
+            }
+        }
+
+        async function startOrSwitchModel() {
+            const select = document.getElementById("model-select");
+            const modelName = select.value;
+            if (!modelName) {
+                alert("Seleziona prima un modello da avviare.");
+                return;
+            }
+
+            const maxModelLen = parseInt(document.getElementById("max-model-len").value) || 4096;
+            const extraFlags = document.getElementById("extra-flags").value || "";
+            const btn = document.getElementById("btn-start");
+
+            btn.disabled = true;
+            btn.innerHTML = `<span>⏳ Avvio container in corso...</span>`;
+
+            try {
+                const res = await fetch("/api/start", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        model_name: modelName,
+                        max_model_len: maxModelLen,
+                        extra_args: extraFlags
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    appendSystemLog(`[CONTAINER SUCCESS] ${data.message}`);
+                } else {
+                    appendSystemLog(`[CONTAINER ERROR] ${data.message}`);
+                    alert("Errore durante l'avvio del container: " + data.message);
+                }
+            } catch (err) {
+                alert("Errore di connessione API: " + err);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = `<span>▶️ Avvia / Switch Modello</span>`;
+                checkStatus();
+            }
+        }
+
+        async function stopContainer() {
+            if (!confirm("Sei sicuro di voler fermare il container vLLM?")) return;
+
+            const btn = document.getElementById("btn-stop");
+            btn.disabled = true;
+
+            try {
+                const res = await fetch("/api/stop", { method: "POST" });
+                const data = await res.json();
+                appendSystemLog(`[CONTAINER STOP] ${data.message}`);
+            } catch (err) {
+                alert("Errore arresto: " + err);
+            } finally {
+                btn.disabled = false;
+                checkStatus();
+            }
+        }
+
+        async function removeContainer() {
+            if (!confirm("Sei sicuro di voler rimuovere il container Podman?")) return;
+            try {
+                const res = await fetch("/api/stop", { method: "POST" });
+                const data = await res.json();
+                appendSystemLog(`[CONTAINER RM] ${data.message}`);
+                alert("Container rimosso.");
+            } catch (err) {
+                alert("Errore rimozione: " + err);
+            } finally {
+                checkStatus();
+            }
+        }
+
+        // LLM Test Chat Logic
+        async function sendChatPrompt() {
+            const input = document.getElementById("chat-prompt");
+            const promptText = input.value.trim();
+            if (!promptText) return;
+
+            const btn = document.getElementById("btn-send-chat");
+            const chatWin = document.getElementById("chat-window");
+            const statsBadge = document.getElementById("chat-stats-badge");
+            const temp = parseFloat(document.getElementById("chat-temp").value) || 0.7;
+            const maxTokens = parseInt(document.getElementById("chat-tokens").value) || 512;
+
+            // Remove placeholder if present
+            if (chatWin.children.length === 1 && chatWin.children[0].classList.contains("italic")) {
+                chatWin.innerHTML = "";
+            }
+
+            // Append User Message
+            const userMsgEl = document.createElement("div");
+            userMsgEl.className = "flex justify-end";
+            userMsgEl.innerHTML = `
+                <div class="bg-cyan-600/30 border border-cyan-500/40 text-cyan-100 rounded-2xl rounded-tr-none px-4 py-2.5 max-w-[85%]">
+                    <div class="text-[10px] font-mono text-cyan-400 mb-0.5">Utente</div>
+                    <div>${escapeHtml(promptText)}</div>
+                </div>
+            `;
+            chatWin.appendChild(userMsgEl);
+
+            // Append Placeholder Assistant Message
+            const assistMsgEl = document.createElement("div");
+            assistMsgEl.className = "flex justify-start";
+            assistMsgEl.innerHTML = `
+                <div class="bg-slate-900 border border-slate-800 text-slate-200 rounded-2xl rounded-tl-none px-4 py-2.5 max-w-[85%] font-mono text-xs">
+                    <div class="text-[10px] font-sans text-cyan-400 mb-0.5 flex items-center gap-1.5">
+                        <span>🤖 Assistant (Intel Arc B580)</span>
+                    </div>
+                    <div class="loading-dots italic text-slate-400">Generazione risposta in corso...</div>
+                </div>
+            `;
+            chatWin.appendChild(assistMsgEl);
+            chatWin.scrollTop = chatWin.scrollHeight;
+
+            input.value = "";
+            btn.disabled = true;
+            statsBadge.textContent = "Elaborazione in corso...";
+
+            const startTime = Date.now();
+
+            try {
+                const res = await fetch("/api/chat", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        prompt: promptText,
+                        temperature: temp,
+                        max_tokens: maxTokens
+                    })
+                });
+                const data = await res.json();
+                const elapsedSec = ((Date.now() - startTime) / 1000).toFixed(2);
+
+                const contentBox = assistMsgEl.querySelector("div > div:last-child");
+
+                if (data.success) {
+                    contentBox.className = "text-slate-100 whitespace-pre-wrap font-sans text-sm mt-1";
+                    contentBox.textContent = data.reply;
+                    
+                    const tokens = data.usage?.completion_tokens || 0;
+                    const tps = tokens > 0 ? (tokens / elapsedSec).toFixed(1) : "--";
+                    statsBadge.textContent = `Generato in ${elapsedSec}s (${tokens} tok | ${tps} tok/s)`;
+                } else {
+                    contentBox.className = "text-rose-400 font-mono text-xs mt-1";
+                    contentBox.textContent = "❌ " + data.error;
+                    statsBadge.textContent = "Errore durante l'inferenza";
+                }
+            } catch (err) {
+                const contentBox = assistMsgEl.querySelector("div > div:last-child");
+                contentBox.className = "text-rose-400 font-mono text-xs mt-1";
+                contentBox.textContent = "❌ Errore di rete: " + err;
+                statsBadge.textContent = "Errore di connessione";
+            } finally {
+                btn.disabled = false;
+                chatWin.scrollTop = chatWin.scrollHeight;
+            }
+        }
+
+        function clearChatHistory() {
+            const chatWin = document.getElementById("chat-window");
+            chatWin.innerHTML = `
+                <div class="text-slate-500 italic text-xs text-center py-4">
+                    Chat pulita. Inserisci un nuovo prompt per verificare l'inferenza.
+                </div>
+            `;
+            document.getElementById("chat-stats-badge").textContent = "Pronto per l'inferenza";
+        }
+
+        function escapeHtml(text) {
+            return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        }
+
+        function initWebSockets() {
+            const loc = window.location;
+            const wsProtocol = loc.protocol === "https:" ? "wss:" : "ws:";
+
+            function connectGpuWs() {
+                gpuWs = new WebSocket(`${wsProtocol}//${loc.host}/ws/gpu`);
+                gpuWs.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    updateGpuUi(data);
+                };
+                gpuWs.onclose = () => setTimeout(connectGpuWs, 2000);
+            }
+
+            function connectLogWs() {
+                logWs = new WebSocket(`${wsProtocol}//${loc.host}/ws/logs`);
+                logWs.onmessage = (event) => {
+                    appendLogLine(event.data);
+                };
+                logWs.onclose = () => setTimeout(connectLogWs, 2000);
+            }
+
+            connectGpuWs();
+            connectLogWs();
+        }
+
+        function updateGpuUi(data) {
+            if (!data || !data.vram) return;
+
+            const vram = data.vram;
+            document.getElementById("vram-used-gb").textContent = vram.vram_used_gb.toFixed(2);
+            document.getElementById("vram-total-gb").textContent = vram.vram_total_gb.toFixed(1);
+            document.getElementById("vram-percent-badge").textContent = `${vram.vram_percent.toFixed(1)}%`;
+            document.getElementById("vram-progress-bar").style.width = `${vram.vram_percent}%`;
+            document.getElementById("vram-free-mb").textContent = Math.round(vram.vram_free_mb);
+            document.getElementById("xe-fds-count").textContent = vram.active_xe_fds || 0;
+
+            if (data.system) {
+                document.getElementById("cpu-percent").textContent = `${Math.round(data.system.cpu_percent)}%`;
+                document.getElementById("cpu-bar").style.width = `${data.system.cpu_percent}%`;
+
+                document.getElementById("ram-used").textContent = `${data.system.ram_used_gb} GB`;
+                document.getElementById("ram-bar").style.width = `${data.system.ram_percent}%`;
+            }
+        }
+
+        function appendLogLine(line) {
+            rawLogLines.push(line);
+            if (rawLogLines.length > 1000) rawLogLines.shift();
+
+            const win = document.getElementById("terminal-window");
+            const filter = document.getElementById("log-filter").value.toLowerCase();
+
+            if (filter && !line.toLowerCase().includes(filter)) return;
+
+            const el = document.createElement("div");
+            el.className = getLogStyleClass(line);
+            el.textContent = line.trimEnd();
+
+            win.appendChild(el);
+
+            if (document.getElementById("autoscroll-chk").checked) {
+                win.scrollTop = win.scrollHeight;
+            }
+        }
+
+        function appendSystemLog(msg) {
+            appendLogLine(`\n[SYSTEM MANAGER] ${msg}\n`);
+        }
+
+        function getLogStyleClass(line) {
+            if (line.includes("ERROR") || line.includes("OOM") || line.includes("OutOfMemory") || line.includes("Exception")) {
+                return "text-rose-400 font-semibold bg-rose-950/40 px-1 rounded";
+            }
+            if (line.includes("WARNING") || line.includes("WARN")) {
+                return "text-amber-300";
+            }
+            if (line.includes("Application startup complete") || line.includes("Uvicorn running on")) {
+                return "text-emerald-400 font-bold bg-emerald-950/40 px-1 rounded border-l-2 border-emerald-400";
+            }
+            if (line.includes("vLLM") || line.includes("XPU")) {
+                return "text-cyan-300";
+            }
+            return "text-slate-300";
+        }
+
+        function filterLogs() {
+            const win = document.getElementById("terminal-window");
+            win.innerHTML = "";
+            const filter = document.getElementById("log-filter").value.toLowerCase();
+
+            rawLogLines.forEach(line => {
+                if (!filter || line.toLowerCase().includes(filter)) {
+                    const el = document.createElement("div");
+                    el.className = getLogStyleClass(line);
+                    el.textContent = line.trimEnd();
+                    win.appendChild(el);
+                }
+            });
+
+            if (document.getElementById("autoscroll-chk").checked) {
+                win.scrollTop = win.scrollHeight;
+            }
+        }
+
+        function clearLogs() {
+            rawLogLines = [];
+            document.getElementById("terminal-window").innerHTML = `<div class="text-slate-500 italic">[SISTEMA] Log puliti.</div>`;
+        }
+    </script>
+</body>
+</html>
