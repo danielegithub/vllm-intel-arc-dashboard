@@ -23,7 +23,7 @@ from app.gpu_mon import get_system_telemetry
 app = FastAPI(
     title="Intel Arc vLLM Server & Manager (Ollama & OpenAI Compatible)",
     description="Local AI inference server for Intel Arc GPUs with OpenAI & Ollama API compatibility",
-    version="1.2.0"
+    version="1.3.0"
 )
 
 # Enable CORS for local network clients (Open WebUI, Jan, Continue, etc.)
@@ -47,6 +47,79 @@ class ChatRequest(BaseModel):
     prompt: str
     max_tokens: int = 512
     temperature: float = 0.7
+
+async def wait_for_vllm_ready(timeout_secs: int = 60) -> bool:
+    """
+    Polls http://localhost:8000/v1/models until vLLM API server is ready to accept requests.
+    """
+    start_time = asyncio.get_event_loop().time()
+    async with httpx.AsyncClient(timeout=3.0) as client:
+        while asyncio.get_event_loop().time() - start_time < timeout_secs:
+            try:
+                resp = await client.get("http://localhost:8000/v1/models")
+                if resp.status_code == 200:
+                    return True
+            except Exception:
+                pass
+            await asyncio.sleep(2.0)
+    return False
+
+async def ensure_model_running(requested_model_name: str = None) -> str:
+    """
+    Auto-loads or auto-switches the vLLM container to the requested model.
+    Like Ollama, if a client requests model 'X', it automatically boots model 'X'.
+    """
+    available_models = scan_models()
+    if not available_models:
+        raise HTTPException(
+            status_code=404,
+            detail="Nessun modello trovato nella cartella ~/my_models. Scarica prima un modello tramite la dashboard o download_model.sh."
+        )
+
+    model_names = [m["name"] for m in available_models]
+
+    # Normalize requested model name
+    target_model = None
+    if requested_model_name and requested_model_name not in ("/workspace/model", "default", "vllm", "latest", "auto"):
+        # Match exact or case-insensitive
+        for m_name in model_names:
+            if m_name == requested_model_name or m_name.lower() == requested_model_name.lower():
+                target_model = m_name
+                break
+
+    if not target_model:
+        # Fallback to current running model or first available model
+        status = get_container_status()
+        if status.get("running") and status.get("model_name"):
+            target_model = status.get("model_name")
+        else:
+            target_model = model_names[0]
+
+    status = get_container_status()
+    current_running = status.get("model_name") if status.get("running") else None
+
+    # Case 1: Target model is already running
+    if current_running == target_model:
+        ready = await wait_for_vllm_ready(timeout_secs=5)
+        if ready:
+            return target_model
+
+    # Case 2: Different model is running or container is stopped -> Auto-switch/start
+    start_res = await start_container(model_name=target_model, max_model_len=2048)
+    if not start_res.get("success"):
+        raise HTTPException(
+            status_code=500,
+            detail=f"Impossibile avviare il modello '{target_model}': {start_res.get('message')}"
+        )
+
+    ready = await wait_for_vllm_ready(timeout_secs=60)
+    if not ready:
+        raise HTTPException(
+            status_code=504,
+            detail=f"Timeout durante l'avvio del modello '{target_model}'. Verifica i log nella dashboard."
+        )
+
+    return target_model
 
 @app.get("/", response_class=HTMLResponse)
 async def index_page(request: Request):
@@ -109,15 +182,9 @@ async def api_stop_container():
 async def api_test_chat(req: ChatRequest):
     """
     Proxies a test chat completion request to http://localhost:8000/v1/chat/completions.
+    Auto-starts default model if no container is running.
     """
-    status = get_container_status()
-    if not status.get("running"):
-        return {
-            "success": False,
-            "error": "Il container vLLM non è in esecuzione. Avvia prima un modello per chattare."
-        }
-
-    model_name = status.get("model_name") or "vllm-model"
+    active_model = await ensure_model_running()
 
     payload = {
         "model": "/workspace/model",
@@ -138,7 +205,7 @@ async def api_test_chat(req: ChatRequest):
                     content = choices[0].get("message", {}).get("content", "")
                     return {
                         "success": True,
-                        "model": model_name,
+                        "model": active_model,
                         "reply": content,
                         "usage": resp_json.get("usage", {})
                     }
@@ -153,6 +220,7 @@ async def api_test_chat(req: ChatRequest):
 # =====================================================================
 # OPENAI COMPATIBLE PROXY API ENDPOINTS (/v1/...)
 # Available for local network clients (Open WebUI, Continue, Jan, Cursor)
+# Supports AUTO-LOADING and AUTO-SWITCHING models like Ollama!
 # =====================================================================
 
 @app.get("/v1/models")
@@ -193,20 +261,19 @@ async def openai_get_models():
 async def openai_chat_completions(request: Request):
     """
     OpenAI-compatible /v1/chat/completions endpoint (supports streaming & non-streaming).
+    Auto-loads or auto-switches model container dynamically!
     """
-    status = get_container_status()
-    if not status.get("running"):
-        raise HTTPException(
-            status_code=503,
-            detail="Nessun modello vLLM attualmente in esecuzione. Avvia un modello tramite la dashboard o POST /api/start"
-        )
-    
     try:
         body = await request.json()
     except Exception:
         raise HTTPException(status_code=400, detail="Formato JSON non valido.")
 
-    # Override model target to point to container path
+    requested_model = body.get("model")
+    
+    # Auto-load or auto-switch container to requested model!
+    active_model = await ensure_model_running(requested_model)
+
+    # Override model target to point to container internal path
     body["model"] = "/workspace/model"
     is_stream = body.get("stream", False)
     vllm_target = "http://localhost:8000/v1/chat/completions"
@@ -236,16 +303,16 @@ async def openai_chat_completions(request: Request):
 @app.post("/v1/completions")
 async def openai_completions(request: Request):
     """
-    OpenAI-compatible /v1/completions endpoint.
+    OpenAI-compatible /v1/completions endpoint. Auto-loads model if needed.
     """
-    status = get_container_status()
-    if not status.get("running"):
-        raise HTTPException(
-            status_code=503,
-            detail="Nessun modello vLLM in esecuzione. Avvia prima un modello."
-        )
-    
-    body = await request.json()
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Formato JSON non valido.")
+
+    requested_model = body.get("model")
+    await ensure_model_running(requested_model)
+
     body["model"] = "/workspace/model"
     is_stream = body.get("stream", False)
     vllm_target = "http://localhost:8000/v1/completions"
