@@ -1546,19 +1546,19 @@ docs/
 - [x] 4️⃣ **Process Cleanup** - Timeout su container startup + graceful shutdown ✅ IMPLEMENTATO
 
 ### **FASE 3 - PERFORMANCE (Caching & Optimization) - Tempo: 2 ore**
-- [ ] 1️⃣ **Model Metadata Cache** - Cache `scan_models()` risultati (refresh ogni 30s)
-- [ ] 2️⃣ **Health Check Polling** - Reduce `/api/status` calls (cache 5s)
-- [ ] 3️⃣ **Log Streaming Optimization** - Tail buffer per nuovi subscribers
+- [x] 1️⃣ **Model Metadata Cache** - Cache `scan_models()` risultati (refresh ogni 30s) ✅ IMPLEMENTATO
+- [x] 2️⃣ **Health Check Polling** - Endpoint `/health` + cache 5s status ✅ IMPLEMENTATO
+- [x] 3️⃣ **Log Streaming Optimization** - Subscriber pattern via EventBroadcaster ✅ IMPLEMENTATO
 
 ### **FASE 4 - UX (Client-Side Validation) - Tempo: 1-2 ore**
-- [ ] 1️⃣ **JavaScript Validation** - Validazione input nel browser (mirror server-side)
-- [ ] 2️⃣ **Toast Notifications** - Success/error messages con auto-dismiss
-- [ ] 3️⃣ **Loading States** - Visual feedback durante operazioni lunghe
+- [x] 1️⃣ **JavaScript Validation** - Validazione input nel browser (mirror server-side) ✅ IMPLEMENTATO
+- [x] 2️⃣ **Toast Notifications** - Success/error messages con auto-dismiss ✅ IMPLEMENTATO
+- [x] 3️⃣ **Loading States** - Visual feedback durante operazioni lunghe ✅ IMPLEMENTATO
 
 ### **FASE 5 - DEPLOYMENT (Scripts & Config) - Tempo: 1 ora**
-- [ ] 1️⃣ **Systemd Enhancement** - EnvironmentFile per .env config
-- [ ] 2️⃣ **Backup Scripts** - Backup modelli + config
-- [ ] 3️⃣ **Health Monitor** - Script di healthcheck per monitoring
+- [x] 1️⃣ **Systemd Enhancement** - EnvironmentFile per .env config + venv PATH ✅ IMPLEMENTATO
+- [x] 2️⃣ **Backup Scripts** - `backup_models.sh` + `restore_models.sh` ✅ IMPLEMENTATO
+- [x] 3️⃣ **Health Monitor** - Endpoint di healthcheck per monitoring (`/health`) ✅ IMPLEMENTATO
 
 ---
 
@@ -1567,24 +1567,24 @@ docs/
 Prima di considerare una fix "completa", verifica:
 
 ### Per CORS/Sicurezza:
-- [ ] Dashboard web da localhost:5000 funziona ✅
-- [ ] Dashboard da IP LAN funziona ✅
-- [ ] Dashboard da Tailscale funziona ✅
-- [ ] Open WebUI/Continue può fare inferenza da LAN ✅
-- [ ] Open WebUI/Continue può fare inferenza da Tailscale ✅
-- [ ] API Key richiesta solo per `/api/start`, `/api/stop`, `/api/pull` ✅
+- [x] Dashboard web da localhost:5000 funziona ✅
+- [x] Dashboard da IP LAN funziona ✅
+- [x] Dashboard da Tailscale funziona ✅
+- [x] Open WebUI/Continue può fare inferenza da LAN ✅
+- [x] Open WebUI/Continue può fare inferenza da Tailscale ✅
+- [x] API Key richiesta solo per `/api/start`, `/api/stop`, `/api/pull` ✅
 
 ### Per Input Validation:
-- [ ] Model validi caricano correttamente ✅
-- [ ] Path traversal (`../../etc/passwd`) bloccato ✅
-- [ ] Shell metacharacters in extra_args bloccati ✅
-- [ ] Flag vLLM legittimi passano ✅
-- [ ] Flag non-whitelisted rejettati con messaggio chiaro ✅
+- [x] Model validi caricano correttamente ✅
+- [x] Path traversal (`../../etc/passwd`) bloccato ✅
+- [x] Shell metacharacters in extra_args bloccati ✅
+- [x] Flag vLLM legittimi passano ✅
+- [x] Flag non-whitelisted rejettati con messaggio chiaro ✅
 
 ### Per Logger/Debugging:
-- [ ] Errors loggati a file (non swallowed) ✅
-- [ ] WebSocket errors non crash l'app ✅
-- [ ] Processi Podman terminati su shutdown ✅
+- [x] Errors loggati a file (non swallowed) ✅
+- [x] WebSocket errors non crash l'app ✅
+- [x] Processi Podman terminati su shutdown ✅
 
 ---
 
