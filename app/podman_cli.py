@@ -9,6 +9,9 @@ CONTAINER_NAME = "vllm-intel-arc"
 IMAGE_NAME = "docker.io/intel/vllm:0.17.0-xpu"
 DEFAULT_MODELS_DIR = Path.home() / "my_models"
 
+# Global log queue for real-time system events (image pull progress, etc.)
+system_log_queue = asyncio.Queue()
+
 def scan_models(models_dir: str = None) -> List[Dict]:
     """
     Scans ~/my_models directory for model folders and estimates details.
@@ -64,28 +67,36 @@ def check_image_exists() -> bool:
 
 async def pull_image() -> Dict:
     """
-    Pulls the vLLM Intel Arc container image from docker.io.
+    Pulls docker.io/intel/vllm:0.17.0-xpu while streaming live progress output to system_log_queue.
     """
     try:
+        await system_log_queue.put(f"[PODMAN PULL] Avvio download immagine {IMAGE_NAME}...\n")
         proc = await asyncio.create_subprocess_exec(
             "podman", "pull", IMAGE_NAME,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT
         )
-        output_lines = []
+        
         while True:
             line = await proc.stdout.readline()
             if not line:
                 break
-            output_lines.append(line.decode("utf-8", errors="replace"))
+            decoded_line = line.decode("utf-8", errors="replace")
+            await system_log_queue.put(f"[PODMAN PULL] {decoded_line}")
 
         await proc.wait()
         if proc.returncode == 0:
-            return {"success": True, "message": f"Immagine '{IMAGE_NAME}' scaricata con successo!"}
+            msg = f"Immagine '{IMAGE_NAME}' scaricata ed installata con successo!"
+            await system_log_queue.put(f"[PODMAN PULL SUCCESS] {msg}\n")
+            return {"success": True, "message": msg}
         else:
-            return {"success": False, "message": f"Errore download immagine: {''.join(output_lines[-5:])}"}
+            msg = f"Errore durante il download dell'immagine {IMAGE_NAME}."
+            await system_log_queue.put(f"[PODMAN PULL ERROR] {msg}\n")
+            return {"success": False, "message": msg}
     except Exception as e:
-        return {"success": False, "message": f"Eccezione durante il pull: {str(e)}"}
+        err_msg = f"Eccezione durante il pull: {str(e)}"
+        await system_log_queue.put(f"[PODMAN PULL ERROR] {err_msg}\n")
+        return {"success": False, "message": err_msg}
 
 def get_container_status() -> Dict:
     """
@@ -150,7 +161,7 @@ def get_container_status() -> Dict:
 
 async def start_container(model_name: str, max_model_len: int = 4096, extra_args: str = "") -> Dict:
     """
-    Stops existing container and runs docker.io/intel/vllm:0.17.0-xpu with specified parameters.
+    Stops existing container and runs docker.io/intel/vllm:0.17.0-xpu with hardware flags.
     """
     model_path = DEFAULT_MODELS_DIR / model_name
     if not model_path.exists():
@@ -158,12 +169,12 @@ async def start_container(model_name: str, max_model_len: int = 4096, extra_args
 
     await stop_container()
 
+    # Correct hardware invocation for Intel Arc GPU via /dev/dri
     cmd = [
         "podman", "run", "-d", "--rm",
         "--name", CONTAINER_NAME,
         "--device", "/dev/dri:/dev/dri",
         "--net=host",
-        "--device", "xpu",
         "-v", f"{model_path.resolve()}:/workspace/model:ro",
         IMAGE_NAME,
         "--model", "/workspace/model",
@@ -185,21 +196,27 @@ async def start_container(model_name: str, max_model_len: int = 4096, extra_args
 
         if proc.returncode == 0:
             cid = stdout.decode().strip()[:12]
+            msg = f"Container {CONTAINER_NAME} avviato con successo ({cid})"
+            await system_log_queue.put(f"[CONTAINER SUCCESS] {msg}\n")
             return {
                 "success": True,
-                "message": f"Container {CONTAINER_NAME} avviato con successo ({cid})",
+                "message": msg,
                 "container_id": cid,
                 "command": " ".join(cmd)
             }
         else:
             err_msg = stderr.decode().strip()
+            msg = f"Impossibile avviare il container: {err_msg}"
+            await system_log_queue.put(f"[CONTAINER ERROR] {msg}\n")
             return {
                 "success": False,
-                "message": f"Impossibile avviare il container: {err_msg}",
+                "message": msg,
                 "command": " ".join(cmd)
             }
     except Exception as e:
-        return {"success": False, "message": f"Eccezione avvio container: {str(e)}"}
+        err_msg = f"Eccezione avvio container: {str(e)}"
+        await system_log_queue.put(f"[CONTAINER ERROR] {err_msg}\n")
+        return {"success": False, "message": err_msg}
 
 async def stop_container() -> Dict:
     """
@@ -226,24 +243,60 @@ async def stop_container() -> Dict:
 
 async def stream_logs() -> AsyncGenerator[str, None]:
     """
-    Asynchronously streams logs from podman logs -f vllm-intel-arc.
+    Asynchronously streams logs from podman logs -f vllm-intel-arc AND system_log_queue events.
     """
-    cmd = ["podman", "logs", "-f", "--tail", "200", CONTAINER_NAME]
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT
-        )
-        
-        while True:
-            line = await proc.stdout.readline()
-            if not line:
-                break
-            yield line.decode("utf-8", errors="replace")
-    except asyncio.CancelledError:
-        if 'proc' in locals() and proc.returncode is None:
-            proc.terminate()
-            await proc.wait()
-    except Exception as e:
-        yield f"[LOG STREAM ERROR] {str(e)}\n"
+    has_warned_missing = False
+    
+    while True:
+        try:
+            while not system_log_queue.empty():
+                try:
+                    msg = system_log_queue.get_nowait()
+                    yield msg
+                except asyncio.QueueEmpty:
+                    break
+
+            status = get_container_status()
+            if not status.get("exists"):
+                if not has_warned_missing:
+                    yield "[SISTEMA] Container 'vllm-intel-arc' non ancora creato. Avvia un modello per visualizzare i log di vLLM.\n"
+                    has_warned_missing = True
+                await asyncio.sleep(2.0)
+                continue
+
+            has_warned_missing = False
+            cmd = ["podman", "logs", "-f", "--tail", "200", CONTAINER_NAME]
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT
+            )
+            
+            try:
+                while True:
+                    while not system_log_queue.empty():
+                        try:
+                            yield system_log_queue.get_nowait()
+                        except asyncio.QueueEmpty:
+                            break
+
+                    try:
+                        line = await asyncio.wait_for(proc.stdout.readline(), timeout=1.0)
+                        if not line:
+                            break
+                        yield line.decode("utf-8", errors="replace")
+                    except asyncio.TimeoutError:
+                        pass
+            finally:
+                if proc.returncode is None:
+                    try:
+                        proc.terminate()
+                        await proc.wait()
+                    except Exception:
+                        pass
+            await asyncio.sleep(1.0)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            yield f"[LOG STREAM ERROR] {str(e)}\n"
+            await asyncio.sleep(2.0)

@@ -378,7 +378,6 @@
                 const btnSendChat = document.getElementById("btn-send-chat");
                 const chatStats = document.getElementById("chat-stats-badge");
 
-                // Update Image Badge & Pull Button
                 if (data.image_downloaded) {
                     imgBadge.textContent = "Immagine Podman OK";
                     imgBadge.className = "text-xs px-2 py-0.5 rounded font-mono bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
@@ -389,9 +388,7 @@
                     btnPullLabel.textContent = "📥 Scarica Immagine vLLM (Richiesto)";
                 }
 
-                // State-Driven Button Controls
                 if (!data.image_downloaded) {
-                    // Case 1: Image not present
                     btnStart.disabled = true;
                     btnStartLabel.textContent = "▶️ Scarica prima l'Immagine";
                     btnStop.disabled = true;
@@ -403,7 +400,6 @@
                     chatStats.textContent = "Inattivo (Immagine vLLM mancante)";
 
                 } else if (data.running) {
-                    // Case 2: Container IS RUNNING
                     dot.className = "w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-md shadow-emerald-400/50 animate-pulse";
                     text.textContent = `Attivo (${data.model_name || 'vLLM'})`;
                     text.className = "text-xs font-semibold text-emerald-300";
@@ -419,14 +415,13 @@
                     chatStats.textContent = `Pronto (Modello: ${data.model_name || 'vLLM'})`;
 
                 } else {
-                    // Case 3: Image downloaded, but Container STOPPED / NOT CREATED
                     dot.className = "w-2.5 h-2.5 rounded-full bg-slate-500";
                     text.textContent = data.exists ? "Inattivo (Container arrestato)" : "Nessun container in esecuzione";
                     text.className = "text-xs font-semibold text-slate-400";
 
                     btnStart.disabled = false;
                     btnStartLabel.textContent = "▶️ Avvia Modello";
-                    btnStop.disabled = true; // Nothing to stop
+                    btnStop.disabled = true;
                     btnRm.disabled = !data.exists;
 
                     chatPrompt.disabled = true;
@@ -448,12 +443,13 @@
             try {
                 const res = await fetch("/api/image/pull", { method: "POST" });
                 const data = await res.json();
-                if (data.success) {
-                    appendSystemLog(`[PODMAN SUCCESS] ${data.message}`);
-                    alert(data.message);
+                const msg = data.detail || data.message || "Risposta dal server";
+                if (res.ok && data.success !== false) {
+                    appendSystemLog(`[PODMAN SUCCESS] ${msg}`);
+                    alert(msg);
                 } else {
-                    appendSystemLog(`[PODMAN ERROR] ${data.message}`);
-                    alert("Errore pull: " + data.message);
+                    appendSystemLog(`[PODMAN ERROR] ${msg}`);
+                    alert("Errore pull: " + msg);
                 }
             } catch (err) {
                 alert("Errore API pull: " + err);
@@ -490,11 +486,12 @@
                     })
                 });
                 const data = await res.json();
-                if (data.success) {
-                    appendSystemLog(`[CONTAINER SUCCESS] ${data.message}`);
+                const msg = data.detail || data.message || "Risposta avvio container";
+                if (res.ok && data.success !== false) {
+                    appendSystemLog(`[CONTAINER SUCCESS] ${msg}`);
                 } else {
-                    appendSystemLog(`[CONTAINER ERROR] ${data.message}`);
-                    alert("Errore durante l'avvio del container: " + data.message);
+                    appendSystemLog(`[CONTAINER ERROR] ${msg}`);
+                    alert("Errore durante l'avvio del container: " + msg);
                 }
             } catch (err) {
                 alert("Errore di connessione API: " + err);
@@ -513,7 +510,8 @@
             try {
                 const res = await fetch("/api/stop", { method: "POST" });
                 const data = await res.json();
-                appendSystemLog(`[CONTAINER STOP] ${data.message}`);
+                const msg = data.detail || data.message || "Container arrestato";
+                appendSystemLog(`[CONTAINER STOP] ${msg}`);
             } catch (err) {
                 alert("Errore arresto: " + err);
             } finally {
@@ -527,7 +525,8 @@
             try {
                 const res = await fetch("/api/stop", { method: "POST" });
                 const data = await res.json();
-                appendSystemLog(`[CONTAINER RM] ${data.message}`);
+                const msg = data.detail || data.message || "Container rimosso";
+                appendSystemLog(`[CONTAINER RM] ${msg}`);
                 alert("Container rimosso.");
             } catch (err) {
                 alert("Errore rimozione: " + err);
@@ -602,8 +601,9 @@
                     const tps = tokens > 0 ? (tokens / elapsedSec).toFixed(1) : "--";
                     statsBadge.textContent = `Generato in ${elapsedSec}s (${tokens} tok | ${tps} tok/s)`;
                 } else {
+                    const errMsg = data.error || data.detail || "Errore sconosciuto";
                     contentBox.className = "text-rose-400 font-mono text-xs mt-1";
-                    contentBox.textContent = "❌ " + data.error;
+                    contentBox.textContent = "❌ " + errMsg;
                     statsBadge.textContent = "Errore durante l'inferenza";
                 }
             } catch (err) {
