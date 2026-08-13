@@ -112,7 +112,7 @@ async def ensure_model_running(requested_model_name: str = None) -> str:
             detail=f"Impossibile avviare il modello '{target_model}': {start_res.get('message')}"
         )
 
-    ready = await wait_for_vllm_ready(timeout_secs=60)
+    ready = await wait_for_vllm_ready(timeout_secs=120)
     if not ready:
         raise HTTPException(
             status_code=504,
