@@ -8,183 +8,166 @@ Include una Dashboard Web reattiva ed un servizio di background **Systemd** che 
 
 ---
 
-## � SICUREZZA
+## 🗺️ ARCHITETTURA DELLE PORTE
 
-La v1.3.0+ include protezioni di sicurezza per reti locali:
-
-- ✅ **Smart CORS**: Consente solo connessioni da rete locale + Tailscale (blocca attacchi XSS da internet)
-- ✅ **API Key Protection**: Operazioni sensibili (`/api/start`, `/api/stop`, `/api/pull`) richiedono autenticazione
-- ✅ **Input Validation**: Sanitizzazione rigorosa di model_name e extra_args (previene path traversal e shell injection)
-- ✅ **Structured Logging**: Logging completo di tutte le operazioni e errori
-- ✅ **Network-Ready**: Fully compatible con rete LAN locale e Tailscale remoto
-
-**Per i client remoti:** Inferenza (`/v1/chat/completions`) è pubblica sulla LAN - niente API Key richiesta!
-
-Vedi [CLIENT_INTEGRATION_GUIDE.md](CLIENT_INTEGRATION_GUIDE.md) per come connettersi da client remoti.
+| Porta | Servizio | Descrizione |
+|---|---|---|
+| **`5000`** | **vLLM Dashboard & API Server** (`app/main.py`) | **Porta principale del progetto.** Web UI, API OpenAI (`/v1/...`), API Ollama (`/api/...`) e WebSockets. |
+| **`8000`** | **Container vLLM Intel Arc** (`podman`) | Usata internamente dal container vLLM (il backend fa da proxy e gestisce l'auto-loading). |
+| **`3000`** | **Open WebUI** *(Opzionale)* | Porta predefinita se installi Open WebUI come interfaccia chat client esterna. |
 
 ---
 
-## ⚙️ CONFIGURAZIONE (Opzionale)
+## 🔥 CARATTERISTICHE PRINCIPALI
 
-### Variabili d'Ambiente
-
-Copia `.env.example` a `.env` e personalizza:
-
-```bash
-cp .env.example .env
-nano .env
-```
-
-**Parametri importanti:**
-```bash
-# Security
-API_KEY=your-secret-key-for-admin-operations
-
-# Server
-SERVER_PORT=5000
-LOG_LEVEL=INFO
-
-# Models
-MODELS_DIR=~/my_models
-
-# GPU
-GPU_MEMORY_UTILIZATION=0.70
-DEFAULT_DTYPE=float16
-```
-
----
-
-## �🔥 CARATTERISTICHE PRINCIPALI
-
-* **🤖 API Proxy "Stile Ollama" & OpenAI Compatibile (`:5000`)**: Espone endpoints universali `/v1/chat/completions`, `/v1/models`, `/api/tags`, `/api/ps` accessibili da qualsiasi client di rete.
-* **⚡ Auto-Loading & Auto-Switch dei Modelli**: Proprio come Ollama, quando un client di rete (Open WebUI, Continue, Jan, Cursor) richiede un modello presente in `~/my_models`, il server lo carica o lo sostituisce automaticamente in VRAM!
-* **🌍 Accesso da Rete Locale & Tailscale**: In ascolto su `0.0.0.0:5000` con CORS completamente abilitato.
-* **📊 Telemetria VRAM Live**: Monitoraggio in tempo reale del consumo di VRAM della GPU Intel Arc tramite WebSocket.
-* **📜 Live Log Streamer**: Visualizza i log di vLLM (`podman logs -f`) in tempo reale direttamente nel browser.
+* **🤖 API Proxy "Stile Ollama" & OpenAI Compatibile (`:5000`)**: Espone endpoint universali `/v1/chat/completions`, `/v1/models`, `/api/tags`, `/api/ps` utilizzabili da qualsiasi applicazione AI (Open WebUI, Continue.dev, Cursor, Jan, LM Studio, Obsidian).
+* **⚡ Auto-Loading & Auto-Switch dei Modelli**: Se un client richiede un modello presente in `~/my_models`, il server arresta il vecchio container e avvia automaticamente il nuovo modello in VRAM.
+* **🌍 Accesso da Rete Locale & Tailscale**: In ascolto su `0.0.0.0:5000` con CORS Smart per LAN e subnet Tailscale (`100.0.0.0/8`).
+* **📊 Telemetria VRAM Live**: Monitoraggio in tempo reale del consumo VRAM della GPU Intel Arc tramite driver `xe` (/proc/fdinfo) via WebSocket.
+* **📜 Live Log Streamer**: Streaming in tempo reale dei log del container vLLM (`podman logs -f`) e degli eventi di sistema.
+* **🛡️ Protezione e Validazione**: Sanitizzazione input (anti path-traversal e whitelist flag vLLM) e protezione opzionale con API Key per operazioni amministrative.
+* **🏥 Health Check (`GET /health`)**: Endpoint di monitoraggio per verificare salute di vLLM Server, Podman e Filesystem.
+* **📦 Utility di Backup/Restore**: Script bash per archiviare e ripristinare i modelli in un click.
 
 ---
 
 ## 📌 CONFIGURAZIONE IN UN SOLO COMANDO (`configure_pc.sh`)
 
-Per rendere l'installazione accessibile a chiunque, abbiamo creato lo wizard interattivo **`./configure_pc.sh`**.
+Per configurare tutto il sistema da zero, basta eseguire lo wizard interattivo:
 
-Lo script compie automaticamente **tutti** i passaggi necessari:
-1. **Rileva ed installa Podman**: Se Podman non è installato, lo scarica ed installa automaticamente tramite il gestore di pacchetti di sistema (`apt`, `dnf`, `pacman`).
-2. **Configura i permessi hardware GPU Intel**: Aggiunge l'utente ai gruppi `render` e `video` per garantire l'accesso diretto alla scheda video.
-3. **Prepara l'ambiente Python & Autostart Systemd**: Configura il virtual environment e registra il servizio `vllm-dashboard.service` per far partire l'app in background ad ogni avvio del PC.
-4. **Scarica i Modelli LLM da Hugging Face**: Offre un menu interattivo per scaricare direttamente i modelli pre-testati ed ottimizzati per 16GB VRAM (es. `Qwen2.5-Coder-7B-Instruct-AWQ`, `Qwen2.5-7B-Instruct-AWQ`, `DeepSeek-R1-Distill-Qwen-7B-AWQ`) nella cartella `~/my_models`.
-
----
-
-## � STATUS IMPLEMENTAZIONE
-
-### ✅ FASE 1 - COMPLETATA (v1.3.0)
-
-**Moduli di Sicurezza Implementati:**
-- `app/validators.py` - Input validation rigorosa per model_name e extra_args
-- `app/security.py` - Smart CORS detection + API Key middleware
-- `app/event_broadcaster.py` - Thread-safe event broadcaster per logs real-time
-- `app/logging_config.py` - Structured logging con file rotation
-
-**Miglioramenti:**
-1. ✅ CORS smart-configured per localhost + LAN + Tailscale
-2. ✅ API Key protection per operazioni sensibili (`/api/start`, `/api/stop`, `/api/pull`)
-3. ✅ Input validation previene path traversal e shell injection
-4. ✅ Thread-safe logging per multiple WebSocket clients
-5. ✅ Structured logging in file + console con rotation automatico
-
-**Ambiente di Configurazione:**
-- `.env.example` - Template di configuration per API_KEY, SERVER_PORT, GPU_MEMORY_UTILIZATION
-- `requirements.txt` - Updated con pydantic, python-dotenv, pyyaml
-- Compatibile con systemd EnvironmentFile per caricamento .env
-
-### ✅ FASE 2 - COMPLETATA (v1.4.0)
-
-**Sistema di Configurazione Centralizzato:**
-- `app/config.py` - Centralized configuration con dataclasses
-  - Support YAML: `vllm-dashboard.yaml`
-  - Support .env: `API_KEY`, `SERVER_PORT`, etc
-  - Precedence: defaults → YAML → environment variables
-  
-**GPU Auto-Detection:**
-- Auto-rileva VRAM della GPU Intel Arc (con fallback)
-- Sostituisce hardcoded 16GB VRAM
-- Configurable via `vllm-dashboard.yaml` o `total_vram_mb` env var
-
-**Operazioni con Timeout:**
-- Image pull: `IMAGE_PULL_TIMEOUT` (default 600s / 10min)
-- Container start: `CONTAINER_START_TIMEOUT` (default 120s / 2min)
-- Container stop: `CONTAINER_STOP_TIMEOUT` (default 30s)
-- Previene operazioni bloccate indefinitamente
-
-**Nuovi Endpoint:**
-- `GET /api/config` - Visualizza configurazione attuale (non espone API_KEY)
-
-**File di Configurazione:**
-- `vllm-dashboard.yaml.example` - Template YAML completo
-- `.env.example` - Aggiornato con timeout parameters
-
-### 📌 PROSSIMI PASSI (FASE 3+)
-
-Vedi [implementation_plan.md](implementation_plan.md) per roadmap completa:
-- **FASE 2:** ✅ COMPLETATA - Config centralizata + YAML + GPU auto-detection
-- **FASE 3:** Caching + Performance optimization
-- **FASE 4:** UX improvements (client-side validation, toast notifications)
-- **FASE 5:** Deployment helpers (backup scripts, monitoring)
-
----
-
-## 📖 DOCUMENTATION ESSENTIALS
-
-Per nuovi setup leggi in ordine:
-1. **[CONFIGURATION_GUIDE.md](CONFIGURATION_GUIDE.md)** ← START HERE - Come configurare l'app
-2. **[CLIENT_INTEGRATION_GUIDE.md](CLIENT_INTEGRATION_GUIDE.md)** - Connessione da client remoti (LAN/Tailscale)
-3. **[implementation_plan.md](implementation_plan.md)** - Roadmap sviluppo + status
-
-Per approfondimenti:
-- **[FASE2_COMPLETION.md](FASE2_COMPLETION.md)** - Technical details di FASE 2
-- **[vllm-dashboard.yaml.example](vllm-dashboard.yaml.example)** - Template YAML
-- **[.env.example](.env.example)** - Template environment variables
-
----
-
-## �🚀 GUIDA COMPLETA DA ZERO
-
-### 1. Clona la repository Git
-```bash
-git clone https://github.com/tuo-utente/vllm-intel-arc-dashboard.git
-cd vllm-intel-arc-dashboard
-```
-
-### 2. Esegui la Configurazione Automatica (Una Tantum)
 ```bash
 ./configure_pc.sh
 ```
 
-### 3. Apri la Dashboard nel Browser
-Vai a: 👉 **[http://localhost:5000](http://localhost:5000)**
-
-1. Se è il primo avvio ed il badge indica `Immagine non presente`, clicca su **`📥 Scarica Immagine vLLM`**.
-2. Seleziona il modello dal menu a tendina e clicca **`▶️ Avvia / Switch Modello`**.
-3. Interroga l'LLM con la **Test Chat integrata** o collega i tuoi client su **`http://<IP-DEL-TUO-PC>:5000/v1`**.
+Lo script compie automaticamente **tutti** i passaggi necessari:
+1. **Rileva ed installa Podman**: Scarica ed installa Podman tramite il gestore di pacchetti (`apt`, `dnf`, `pacman`).
+2. **Configura i permessi hardware GPU Intel**: Aggiunge l'utente ai gruppi `render` e `video` per garantire l'accesso diretto alla scheda video.
+3. **Prepara l'ambiente Python & Autostart Systemd**: Configura il virtual environment e registra il servizio `vllm-dashboard.service` per far partire l'app in background ad ogni avvio del PC.
+4. **Scarica i Modelli LLM**: Menu interattivo per scaricare direttamente i modelli pre-testati ed ottimizzati per 16GB VRAM in `~/my_models`.
 
 ---
 
-## 🌐 UTILIZZO VIA RETE LOCALE & TAILSCALE
+## ⚙️ CONFIGURAZIONE DEL SERVER
 
-Puoi utilizzare l'API da qualsiasi dispositivo sulla rete locale LAN o da qualsiasi parte del mondo via **Tailscale**:
+Il sistema supporta una gerarchia di configurazione a tre livelli: **Default → File YAML (`vllm-dashboard.yaml`) → Variabili d'Ambiente (`.env`)**.
 
-### Indirizzi di Connessione:
-* **Da Rete LAN Locale:** `http://192.168.X.X:5000/v1`
-* **Da Tailscale (VPN):** `http://100.X.X.X:5000/v1`
+### 1. Configurazione via YAML (`vllm-dashboard.yaml`)
+Copia il template di esempio ed inserisci le tue preferenze:
+```bash
+cp vllm-dashboard.yaml.example vllm-dashboard.yaml
+```
 
-### Esempio di chiamata API (con Streaming SSE):
+Esempio `vllm-dashboard.yaml`:
+```yaml
+server:
+  host: 0.0.0.0
+  port: 5000
+  log_level: INFO
+
+gpu:
+  memory_utilization: 0.70
+  dtype: float16
+  max_model_len: 2048
+
+podman:
+  container_name: vllm-intel-arc
+  image_name: docker.io/intel/vllm:0.17.0-xpu
+  image_pull_timeout: 600
+  container_start_timeout: 120
+
+model:
+  models_dir: ~/my_models
+
+security:
+  api_key: ""
+  enable_cors: true
+```
+
+### 2. Configurazione via `.env`
+```bash
+cp .env.example .env
+```
+
+Parametri principali in `.env`:
+```bash
+API_KEY=                         # Opzionale: imposta una chiave per proteggere start/stop/pull
+SERVER_HOST=0.0.0.0
+SERVER_PORT=5000
+MODELS_DIR=~/my_models
+GPU_MEMORY_UTILIZATION=0.70
+DEFAULT_DTYPE=float16
+MAX_MODEL_LEN=2048
+IMAGE_PULL_TIMEOUT=600
+CONTAINER_START_TIMEOUT=120
+```
+
+---
+
+## 🌐 INTEGRAZIONE CON I CLIENT (LAN & TAILSCALE)
+
+Il server risponde a tutte le richieste di inferenza sulla porta **`5000`** (l'inferenza non richiede API Key sulla rete locale).
+
+* **Indirizzo LAN Locale:** `http://192.168.X.X:5000/v1`
+* **Indirizzo Tailscale (VPN):** `http://100.X.X.X:5000/v1`
+
+### 1. Open WebUI (Interfaccia Web Chat)
+1. Apri le impostazioni di Open WebUI (`http://localhost:3000` o remoto).
+2. Vai su **Settings → Connections / Models → OpenAI API**.
+3. Inserisci:
+   - **URL:** `http://<IP-DEL-SERVER>:5000/v1`
+   - **API Key:** `vllm` (o qualsiasi stringa, non verificata per inferenza)
+4. I modelli presenti in `~/my_models` appariranno automaticamente nella lista dei modelli!
+
+### 2. Continue.dev (VS Code / JetBrains Extension)
+Nel tuo file `~/.continue/config.json`:
+```json
+{
+  "models": [
+    {
+      "title": "Qwen 2.5 Coder Intel Arc",
+      "provider": "openai",
+      "model": "Qwen2.5-Coder-7B-Instruct-AWQ",
+      "apiBase": "http://192.168.X.X:5000/v1",
+      "apiKey": "none"
+    }
+  ]
+}
+```
+
+### 3. Cursor IDE
+1. Vai su **Cursor Settings → Models → OpenAI API Key**.
+2. Abilita **Override OpenAI Base URL**.
+3. Inserisci: `http://192.168.X.X:5000/v1`
+4. Aggiungi il nome esatto del modello (es. `Qwen2.5-Coder-7B-Instruct-AWQ`).
+
+### 4. Script Python (`openai` SDK)
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://192.168.X.X:5000/v1",
+    api_key="not-needed"
+)
+
+response = client.chat.completions.create(
+    model="Qwen2.5-Coder-7B-Instruct-AWQ",
+    messages=[{"role": "user", "content": "Ciao! Chi sei?"}],
+    stream=True
+)
+
+for chunk in response:
+    if chunk.choices[0].delta.content:
+        print(chunk.choices[0].delta.content, end="", flush=True)
+print()
+```
+
+### 5. Chiamata diretta con `curl` (Streaming SSE)
 ```bash
 curl http://192.168.X.X:5000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "Qwen2.5-Coder-7B-Instruct-AWQ",
-    "messages": [{"role": "user", "content": "Scrivi una funzione Python per invertire una lista."}],
+    "messages": [{"role": "user", "content": "Scrivi una funzione Python per calcolare il fattoriale."}],
     "stream": true
   }'
 ```
@@ -193,9 +176,9 @@ curl http://192.168.X.X:5000/v1/chat/completions \
 
 ## 📥 MODELLI CONSIGLIATI E COMANDI DI DOWNLOAD
 
-I seguenti modelli AWQ sono stati testati e verificati per funzionare in modo ottimale sulla scheda video **Intel Arc B580 (16GB VRAM)**:
+I seguenti modelli AWQ sono stati testati e verificati per funzionare in modo ottimale su **Intel Arc B580 (16GB VRAM)**:
 
-### 1️⃣ Qwen2.5-Coder-7B-Instruct-AWQ (Programmazione e Codice)
+### 1️⃣ Qwen2.5-Coder-7B-Instruct-AWQ (Coding & Programmazione)
 ```bash
 podman run --rm -it \
   -v ~/my_models:/download \
@@ -211,7 +194,7 @@ podman run --rm -it \
   bash -c "pip install --no-cache-dir huggingface_hub && hf download Qwen/Qwen2.5-7B-Instruct-AWQ --local-dir /download/Qwen2.5-7B-Instruct-AWQ"
 ```
 
-### 3️⃣ DeepSeek-R1-Distill-Qwen-7B-AWQ (Reasoning Avanzato e Logica)
+### 3️⃣ DeepSeek-R1-Distill-Qwen-7B-AWQ (Reasoning Avanzato e Matematica)
 ```bash
 podman run --rm -it \
   -v ~/my_models:/download \
@@ -229,7 +212,36 @@ podman run --rm -it \
 
 ---
 
-## 🛠️ Comandi di Gestione Systemd
+## 📦 UTILITY DI BACKUP E RIPRISTINO
+
+Il progetto include due script nella cartella `scripts/`:
+
+```bash
+# Esegue il backup compresso (.tar.gz) di ~/my_models in ~/.vllm-dashboard/backups/
+./scripts/backup_models.sh
+
+# Mostra il menu interattivo per ripristinare un backup esistente
+./scripts/restore_models.sh
+```
+
+---
+
+## 🧪 ESECUZIONE DEI TEST AUTOMATICI
+
+Il progetto dispone di una suite di test unitari con `pytest`:
+
+```bash
+./venv/bin/pytest tests/ -v
+```
+
+Include verifiche per:
+* **Validazione input e sanitizzazione flag vLLM** (`tests/test_validators.py`)
+* **Gerarchia di configurazione e variabili d'ambiente** (`tests/test_config.py`)
+* **Calcolo VRAM GPU Intel Arc e telemetria host** (`tests/test_gpu_mon.py`)
+
+---
+
+## 🛠️ COMANDI DI GESTIONE SYSTEMD
 
 ```bash
 # Verificare lo stato del servizio
@@ -238,6 +250,6 @@ systemctl --user status vllm-dashboard.service
 # Riavviare la dashboard / server API
 systemctl --user restart vllm-dashboard.service
 
-# Leggere i log di sistema
+# Visualizzare i log di sistema in tempo reale
 journalctl --user -u vllm-dashboard.service -f
 ```
