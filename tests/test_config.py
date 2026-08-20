@@ -8,7 +8,7 @@ def test_config_defaults():
     config = loader.load(config_file=Path("non_existent_config.yaml"))
     
     assert config.server.port == 5000
-    assert config.gpu.memory_utilization == 0.70
+    assert config.gpu.memory_utilization == 0.86
     assert config.podman.container_name == "vllm-intel-arc"
 
 def test_config_env_overrides(monkeypatch):

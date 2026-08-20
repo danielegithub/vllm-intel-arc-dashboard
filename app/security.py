@@ -85,6 +85,8 @@ class SecurityConfig:
         "/api/start",           # Starts container (CPU, VRAM)
         "/api/stop",            # Stops container
         "/api/rm-container",    # Removes container
+        "/api/models/download", # Downloads model from HF (bandwidth, disk)
+        "/api/models/delete",   # Deletes model from disk
     }
     
     # Endpoints that are public (inference is the product)

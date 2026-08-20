@@ -68,4 +68,19 @@ def test_api_start_validation_failure():
 def test_api_start_invalid_max_model_len():
     response = client.post("/api/start", json={"model_name": "ValidModel", "max_model_len": 50})
     assert response.status_code == 400
-    assert "max_model_len must be between 128 and 8192" in response.json()["detail"]
+    assert "max_model_len must be between 128 and 32768" in response.json()["detail"]
+
+def test_api_download_model_validation():
+    response = client.post("/api/models/download", json={"repo_id": ""})
+    assert response.status_code == 400
+    assert "Repo ID Hugging Face obbligatorio" in response.json()["detail"]
+
+def test_api_delete_model_validation():
+    response = client.post("/api/models/delete", json={"model_name": ""})
+    assert response.status_code == 400
+    assert "Nome modello obbligatorio" in response.json()["detail"]
+
+    # Traversal check
+    response = client.post("/api/models/delete", json={"model_name": "../sensitive"})
+    assert response.status_code == 400
+

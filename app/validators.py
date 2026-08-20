@@ -234,3 +234,11 @@ def _is_valid_flag_value(flag: str, value: str) -> bool:
     
     # Default: allow if it matches basic safe pattern
     return True
+
+def validate_repo_id(repo_id: str) -> bool:
+    """
+    Validates Hugging Face repo ID to prevent shell injection.
+    """
+    if not repo_id or not re.match(r'^[\w.-]+/[\w.-]+$', repo_id):
+        raise ValidationError("Invalid Hugging Face Repo ID format")
+    return True

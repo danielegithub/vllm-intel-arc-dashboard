@@ -21,7 +21,7 @@ from app.logging_config import logger
 @dataclass
 class GPUConfig:
     """GPU-specific configuration."""
-    memory_utilization: float = 0.70
+    memory_utilization: float = 0.86
     dtype: str = "float16"
     max_model_len: int = 2048
     # Auto-detected at runtime
@@ -51,9 +51,15 @@ class PodmanConfig:
     """Podman/Container configuration."""
     container_name: str = "vllm-intel-arc"
     image_name: str = "docker.io/intel/vllm:0.17.0-xpu"
+    vllm_host: str = "127.0.0.1"
+    vllm_port: int = 8000
     image_pull_timeout: int = 600  # 10 minutes
     container_start_timeout: int = 120  # 2 minutes
     container_stop_timeout: int = 30  # 30 seconds
+
+    @property
+    def vllm_api_base_url(self) -> str:
+        return f"http://{self.vllm_host}:{self.vllm_port}/v1"
 
 
 @dataclass
@@ -69,6 +75,7 @@ class SecurityConfig:
     """Security configuration."""
     api_key: str = ""
     enable_cors: bool = True
+    require_api_key_for_autoswitch: bool = True
     cors_origins: list = field(default_factory=list)  # Auto-populated
 
 
@@ -227,6 +234,10 @@ class ConfigLoader:
             self.config.podman.container_name = os.getenv("CONTAINER_NAME")
         if "IMAGE_NAME" in os.environ:
             self.config.podman.image_name = os.getenv("IMAGE_NAME")
+        if "VLLM_HOST" in os.environ:
+            self.config.podman.vllm_host = os.getenv("VLLM_HOST")
+        if "VLLM_PORT" in os.environ:
+            self.config.podman.vllm_port = int(os.getenv("VLLM_PORT", "8000"))
         if "IMAGE_PULL_TIMEOUT" in os.environ:
             self.config.podman.image_pull_timeout = int(os.getenv("IMAGE_PULL_TIMEOUT"))
         if "CONTAINER_START_TIMEOUT" in os.environ:
@@ -258,8 +269,8 @@ class ConfigLoader:
         
         # Validate GPU settings
         if not (0.0 < self.config.gpu.memory_utilization <= 1.0):
-            logger.warning(f"Invalid GPU memory utilization, using default 0.70")
-            self.config.gpu.memory_utilization = 0.70
+            logger.warning(f"Invalid GPU memory utilization, using default 0.86")
+            self.config.gpu.memory_utilization = 0.86
         
         if self.config.gpu.max_model_len < 128:
             logger.warning(f"max_model_len too small, using minimum 128")

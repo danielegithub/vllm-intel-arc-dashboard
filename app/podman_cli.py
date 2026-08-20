@@ -2,6 +2,10 @@ import os
 import json
 import asyncio
 import subprocess
+import shutil
+import tempfile
+import re
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Dict, AsyncGenerator
 
@@ -26,7 +30,7 @@ log_broadcaster = EventBroadcaster()
 @cache(ttl_seconds=30)
 def scan_models(models_dir: str = None) -> List[Dict]:
     """
-    Scans ~/my_models directory for model folders and estimates details.
+    Scans ~/my_models directory for model folders and extracts rich metadata (config.json, weights).
     Results are cached for 30 seconds to reduce filesystem I/O.
     """
     target_dir = Path(models_dir) if models_dir else DEFAULT_MODELS_DIR
@@ -52,12 +56,49 @@ def scan_models(models_dir: str = None) -> List[Dict]:
                         weights_count += 1
 
             size_gb = round(total_size_bytes / (1024 ** 3), 2)
+            
+            # Read config.json metadata if present
+            config_file = entry / "config.json"
+            model_type = "unknown"
+            architecture = "unknown"
+            quant_method = "FP16"
+            max_pos_len = 2048
+            
+            if "awq" in entry.name.lower():
+                quant_method = "AWQ"
+            elif "gptq" in entry.name.lower():
+                quant_method = "GPTQ"
+            elif "gguf" in entry.name.lower():
+                quant_method = "GGUF"
+                
+            if config_file.exists():
+                try:
+                    with open(config_file, "r", encoding="utf-8") as cf:
+                        cdata = json.load(cf)
+                        model_type = cdata.get("model_type", "unknown")
+                        archs = cdata.get("architectures", [])
+                        if archs:
+                            architecture = archs[0]
+                        max_pos_len = cdata.get("max_position_embeddings") or cdata.get("seq_length") or 2048
+                        if "quantization_config" in cdata:
+                            quant_method = cdata["quantization_config"].get("quant_method", quant_method).upper()
+                except Exception:
+                    pass
+
+            mtime = datetime.fromtimestamp(entry.stat().st_mtime, tz=timezone.utc).isoformat()
+
             models.append({
                 "name": entry.name,
                 "path": str(entry),
                 "size_gb": size_gb,
+                "size_bytes": total_size_bytes,
                 "has_config": has_config,
-                "weights_count": weights_count
+                "weights_count": weights_count,
+                "model_type": model_type,
+                "architecture": architecture,
+                "quantization": quant_method,
+                "max_position_embeddings": max_pos_len,
+                "modified_at": mtime
             })
 
     models.sort(key=lambda m: m["name"].lower())
@@ -179,7 +220,7 @@ def get_container_status() -> Dict:
                     "container_id": container_id,
                     "model_name": model_name,
                     "image_downloaded": image_downloaded,
-                    "api_url": "http://localhost:8000/v1"
+                    "api_url": config.podman.vllm_api_base_url
                 }
     except Exception as e:
         return {"exists": False, "running": False, "state": "error", "error": str(e), "image_downloaded": image_downloaded}
@@ -192,7 +233,7 @@ def get_container_status() -> Dict:
         "container_id": None,
         "model_name": None,
         "image_downloaded": image_downloaded,
-        "api_url": "http://localhost:8000/v1"
+        "api_url": config.podman.vllm_api_base_url
     }
 
 async def start_container(model_name: str, max_model_len: int = 2048, extra_args: str = "") -> Dict:
@@ -211,22 +252,31 @@ async def start_container(model_name: str, max_model_len: int = 2048, extra_args
         await stop_container()
 
         # Official Intel vLLM Docker launch configuration
+        # SEC-1, SEC-2, PERF-2, PERF-4 optimizations
         cmd = [
             "podman", "run", "-d", "--rm", "--replace",
             "--name", CONTAINER_NAME,
-            "--net=host",
+            "-p", f"127.0.0.1:{config.podman.vllm_port}:{config.podman.vllm_port}",
             "--ipc=host",
-            "--privileged",
+            "--group-add", "keep-groups",
             "-v", "/dev/dri/by-path:/dev/dri/by-path",
             "--device", "/dev/dri:/dev/dri",
             "-e", "VLLM_WORKER_MULTIPROC_METHOD=spawn",
+            "-e", "SYCL_CACHE_PERSISTENT=1",
+            "-e", "SYCL_CACHE_DIR=/cache/sycl",
+            "-e", "NEO_CACHE_PERSISTENT=1",
+            "-e", "NEO_CACHE_DIR=/cache/neo",
+            "-v", f"{Path.home()}/.cache/vllm-arc:/cache",
             "-v", f"{model_path.resolve()}:/workspace/model:ro",
             IMAGE_NAME,
             "vllm", "serve", "/workspace/model",
             "--dtype", str(config.gpu.dtype),
-            "--port", "8000",
+            "--port", str(config.podman.vllm_port),
             "--gpu-memory-utilization", str(config.gpu.memory_utilization),
-            "--max-model-len", str(max_model_len)
+            "--max-model-len", str(max_model_len),
+            "--max-num-seqs", "16",
+            "--enforce-eager",
+            "--served-model-name", model_name
         ]
 
         if extra_args and extra_args.strip():
@@ -236,12 +286,22 @@ async def start_container(model_name: str, max_model_len: int = 2048, extra_args
             await log_broadcaster.broadcast(f"[CONTAINER START] Avvio container con modello '{model_name}'...\n")
             await log_broadcaster.broadcast(f"[CONTAINER START] Timeout: {CONTAINER_START_TIMEOUT} seconds\n")
             
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-            stdout, stderr = await proc.communicate()
+            # NB: non usare PIPE + communicate() qui. Con il port publishing rootless
+            # (-p 127.0.0.1:8000:8000) podman lascia in vita un processo 'rootlessport'
+            # che eredita le pipe: l'EOF non arriva mai e communicate() resta appeso
+            # finche' il container vive. File temporanei + wait() ritornano appena
+            # 'podman run -d' esce.
+            with tempfile.TemporaryFile() as f_out, tempfile.TemporaryFile() as f_err:
+                proc = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdout=f_out,
+                    stderr=f_err
+                )
+                await proc.wait()
+                f_out.seek(0)
+                f_err.seek(0)
+                stdout = f_out.read()
+                stderr = f_err.read()
 
             if proc.returncode == 0:
                 cid = stdout.decode().strip()[:12]
@@ -308,6 +368,86 @@ async def stop_container() -> Dict:
         # Invalidate status cache even on error
         invalidate_status_cache()
         return {"success": False, "message": f"Errore durante l'arresto: {str(e)}"}
+
+async def download_hf_model(repo_id: str, folder_name: str = None) -> Dict:
+    """
+    Downloads a model from Hugging Face directly into models_dir.
+    Streams download progress output via log_broadcaster.
+    """
+    if not folder_name or not folder_name.strip():
+        folder_name = repo_id.split("/")[-1]
+    
+    folder_name = re.sub(r'[^a-zA-Z0-9_\-\.]', '_', folder_name.strip())
+    dest_path = DEFAULT_MODELS_DIR / folder_name
+    
+    try:
+        await log_broadcaster.broadcast(f"[HF DOWNLOAD] Inizio download modello: '{repo_id}' -> '{dest_path}'\n")
+        
+        cmd = [
+            "podman", "run", "--rm",
+            "-v", f"{DEFAULT_MODELS_DIR.resolve()}:/download",
+            "docker.io/library/python:3.11-slim",
+            "bash", "-c",
+            f"pip install --no-cache-dir 'huggingface_hub[cli]' && huggingface-cli download '{repo_id}' --local-dir '/download/{folder_name}' --local-dir-use-symlinks False"
+        ]
+        
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT
+        )
+        
+        while True:
+            line = await proc.stdout.readline()
+            if not line:
+                break
+            decoded = line.decode("utf-8", errors="replace")
+            await log_broadcaster.broadcast(f"[HF DOWNLOAD] {decoded}")
+            
+        await proc.wait()
+        if proc.returncode == 0:
+            invalidate_models_cache()
+            msg = f"Modello '{repo_id}' scaricato con successo in {folder_name}!"
+            await log_broadcaster.broadcast(f"[HF DOWNLOAD SUCCESS] {msg}\n")
+            logger.info(msg)
+            return {"success": True, "message": msg, "folder_name": folder_name}
+        else:
+            msg = f"Errore durante il download del modello '{repo_id}' (exit code {proc.returncode})."
+            await log_broadcaster.broadcast(f"[HF DOWNLOAD ERROR] {msg}\n")
+            logger.error(msg)
+            return {"success": False, "message": msg}
+    except asyncio.CancelledError:
+        msg = "Download modello cancellato."
+        await log_broadcaster.broadcast(f"[HF DOWNLOAD CANCELLED] {msg}\n")
+        return {"success": False, "message": msg}
+    except Exception as e:
+        msg = f"Eccezione durante il download: {str(e)}"
+        await log_broadcaster.broadcast(f"[HF DOWNLOAD ERROR] {msg}\n")
+        return {"success": False, "message": msg}
+
+def delete_model(model_name: str) -> Dict:
+    """
+    Deletes a model directory from ~/my_models safely.
+    """
+    if not model_name or "/" in model_name or "\\" in model_name or model_name.startswith("."):
+        return {"success": False, "message": "Nome modello non valido."}
+    
+    target_dir = (DEFAULT_MODELS_DIR / model_name).resolve()
+    if not target_dir.exists() or not target_dir.is_dir():
+        return {"success": False, "message": f"Cartella modello '{model_name}' non trovata."}
+    
+    status = get_container_status()
+    if status.get("running") and status.get("model_name") == model_name:
+        return {"success": False, "message": f"Impossibile eliminare '{model_name}': il modello è attualmente in esecuzione."}
+        
+    try:
+        shutil.rmtree(target_dir)
+        invalidate_models_cache()
+        logger.info(f"Deleted model directory: {target_dir}")
+        return {"success": True, "message": f"Modello '{model_name}' eliminato con successo."}
+    except Exception as e:
+        logger.error(f"Failed to delete model '{model_name}': {e}")
+        return {"success": False, "message": f"Errore durante l'eliminazione: {str(e)}"}
 
 async def stream_logs() -> AsyncGenerator[str, None]:
     """
