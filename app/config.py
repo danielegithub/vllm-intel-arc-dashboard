@@ -50,7 +50,7 @@ class ServerConfig:
 class PodmanConfig:
     """Podman/Container configuration."""
     container_name: str = "vllm-intel-arc"
-    image_name: str = "docker.io/intel/vllm:0.17.0-xpu"
+    image_name: str = "docker.io/intel/vllm:0.21.0-xpu"
     vllm_host: str = "127.0.0.1"
     vllm_port: int = 8000
     image_pull_timeout: int = 600  # 10 minutes

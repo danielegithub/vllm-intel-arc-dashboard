@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=vLLM Dashboard System Tray
+Comment=Monitora e gestisce il servizio vLLM Dashboard dalla tray bar
+Exec=/home/daniele/Scrivania/vllm-intel-arc-dashboard/venv/bin/python /home/daniele/Scrivania/vllm-intel-arc-dashboard/scripts/tray_indicator.py
+Icon=/home/daniele/Scrivania/vllm-intel-arc-dashboard/assets/vllm-logo.png
+Terminal=false
+Categories=Utility;System;
+StartupNotify=false
+X-GNOME-Autostart-enabled=true

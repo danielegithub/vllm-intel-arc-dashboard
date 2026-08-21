@@ -39,7 +39,7 @@ podman:
   container_name: "vllm-intel-arc"
   
   # Docker image to use
-  image_name: "docker.io/intel/vllm:0.17.0-xpu"
+  image_name: "docker.io/intel/vllm:0.21.0-xpu"
   
   # Timeout for pulling image (seconds)
   image_pull_timeout: 600

@@ -121,7 +121,7 @@ def check_image_exists() -> bool:
 
 async def pull_image() -> Dict:
     """
-    Pulls docker.io/intel/vllm:0.17.0-xpu while streaming live progress output to subscribers.
+    Pulls docker.io/intel/vllm:0.21.0-xpu while streaming live progress output to subscribers.
     Timeout is configurable via IMAGE_PULL_TIMEOUT (default: 600 seconds / 10 minutes).
     """
     async def _pull_image_impl():
@@ -238,7 +238,7 @@ def get_container_status() -> Dict:
 
 async def start_container(model_name: str, max_model_len: int = 2048, extra_args: str = "") -> Dict:
     """
-    Stops existing container and runs docker.io/intel/vllm:0.17.0-xpu using official Intel Docker parameters.
+    Stops existing container and runs docker.io/intel/vllm:0.21.0-xpu using official Intel Docker parameters.
     Broadcasts progress events to all subscribers.
     Timeout is configurable via CONTAINER_START_TIMEOUT (default: 120 seconds / 2 minutes).
     """
@@ -278,6 +278,17 @@ async def start_container(model_name: str, max_model_len: int = 2048, extra_args
             "--enforce-eager",
             "--served-model-name", model_name
         ]
+
+        # Automatic Tool Calling parser configuration based on model architecture
+        lower_name = model_name.lower()
+        has_tool_args = extra_args and ("--enable-auto-tool-choice" in extra_args or "--tool-call-parser" in extra_args)
+        if not has_tool_args:
+            if "llama-3" in lower_name or "llama3" in lower_name:
+                cmd.extend(["--enable-auto-tool-choice", "--tool-call-parser", "llama3_json"])
+            elif "mistral" in lower_name:
+                cmd.extend(["--enable-auto-tool-choice", "--tool-call-parser", "mistral"])
+            elif "hermes" in lower_name:
+                cmd.extend(["--enable-auto-tool-choice", "--tool-call-parser", "hermes"])
 
         if extra_args and extra_args.strip():
             cmd.extend(extra_args.strip().split())
